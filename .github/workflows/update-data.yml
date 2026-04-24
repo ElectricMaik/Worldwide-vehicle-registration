@@ -1,0 +1,50 @@
+name: Update car registration data
+
+on:
+  schedule:
+  - cron: "0 * * * *"      # jede volle Stunde (UTC)
+  workflow_dispatch:        # allow manual trigger
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0        # full history needed for rebase
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests beautifulsoup4 lxml matplotlib
+
+      - name: Run update script
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python scripts/update_data.py
+
+      - name: Commit and push changes
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/countries/
+          # Only commit if there are actual changes
+          if ! git diff --cached --quiet; then
+            TIMESTAMP=$(date -u '+%Y-%m-%d %H:%M UTC')
+            git commit -m "data: update registrations  [${TIMESTAMP}]"
+            # Pull remote changes first to avoid rejected push
+            git pull --rebase origin main
+            git push origin main
+          else
+            echo "No data changes — skipping commit."
+          fi
