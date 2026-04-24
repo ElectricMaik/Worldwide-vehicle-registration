@@ -1,0 +1,90 @@
+{
+  "monthly": {
+    "labels": [
+      "2019",
+      "2020",
+      "2021",
+      "2022",
+      "2023",
+      "2024",
+      "2025"
+    ],
+    "total": [
+      950000,
+      830000,
+      850000,
+      800000,
+      870000,
+      900000,
+      950000
+    ]
+  },
+  "annual": {
+    "labels": [
+      "2019",
+      "2020",
+      "2021",
+      "2022",
+      "2023",
+      "2024",
+      "2025"
+    ],
+    "bev": [
+      950,
+      830,
+      1700,
+      4000,
+      15660,
+      10800,
+      28500
+    ],
+    "phev": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "hybrid": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "petrol": [
+      949050,
+      829170,
+      848300,
+      796000,
+      854340,
+      889200,
+      921500
+    ],
+    "diesel": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "other": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  "last_updated": "2026-04-24T18:00:00.000000Z",
+  "source_monthly": "ISQI (Iran Small Industries and Industrial Parks Organization) / OICA",
+  "source_annual": "ISQI / OICA (BEV: real; non-BEV total only \u2014 no official powertrain breakdown available)"
+}
