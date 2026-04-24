@@ -1,1 +1,1648 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Global Car Registrations</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;800&family=DM+Mono:wght@300;400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:      #0a0e17;
+    --surface: #111827;
+    --border:  #1e2d45;
+    --accent:  #00e5ff;
+    --accent2: #ff6b35;
+    --text:    #e2e8f0;
+    --muted:   #64748b;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); font-family: 'DM Mono', monospace; min-height: 100vh; }
+  body::before {
+    content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background-image: linear-gradient(rgba(0,229,255,0.03) 1px, transparent 1px),
+                      linear-gradient(90deg, rgba(0,229,255,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+  .container { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; padding: 24px; }
+  header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 28px; padding-bottom: 20px; border-bottom: 1px solid var(--border); }
+  .title-block h1 { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 2rem; letter-spacing: -0.03em; line-height: 1.1; background: linear-gradient(135deg, #fff 40%, var(--accent)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+  .subtitle { color: var(--muted); font-size: 0.75rem; margin-top: 6px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-block { display: flex; flex-direction: column; gap: 8px; align-items: flex-end; }
+  .update-badge { display: inline-flex; align-items: center; gap: 6px; background: rgba(0,229,255,0.08); border: 1px solid rgba(0,229,255,0.2); border-radius: 20px; padding: 5px 12px; font-size: 0.7rem; color: var(--accent); }
+  .update-badge .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1);}50%{opacity:.4;transform:scale(.7);} }
+  .year-select { background: var(--surface); border: 1px solid var(--border); color: var(--text); padding: 6px 12px; border-radius: 6px; font-family: 'DM Mono', monospace; font-size: 0.75rem; cursor: pointer; outline: none; }
+  .year-select:focus { border-color: var(--accent); }
+  .main-grid { display: grid; grid-template-columns: 1fr 320px; gap: 20px; }
+  .map-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; position: relative; }
+  .map-panel svg { width: 100%; height: auto; display: block; }
+  .country-path { stroke: rgba(0,229,255,0.12); stroke-width: 0.4px; transition: fill 0.15s, filter 0.15s; cursor: pointer; }
+  .country-path:hover { stroke: var(--accent); stroke-width: 1px; filter: brightness(1.4); }
+  .country-path.selected { stroke: var(--accent2); stroke-width: 1.5px; }
+  .map-zoom-btns { position: absolute; bottom: 14px; right: 14px; display: flex; flex-direction: column; gap: 5px; z-index: 10; }
+  .map-zoom-btns button { width: 30px; height: 30px; background: rgba(15,20,32,0.92); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 1.1rem; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.15s, border-color 0.15s; line-height: 1; padding: 0; }
+  .map-zoom-btns button:hover { background: var(--border); border-color: var(--accent); color: var(--accent); }
+  .map-zoom-reset { font-size: 0.55rem !important; letter-spacing: 0.04em; text-transform: uppercase; }
+  .country-path.search-dim { opacity: 0.18; transition: opacity 0.2s; }
+  .country-path.search-highlighted { stroke: #fff; stroke-width: 2px; filter: brightness(1.8) drop-shadow(0 0 6px rgba(0,229,255,0.9)); opacity: 1; transition: all 0.2s; }
+  .sidebar { display: flex; flex-direction: column; gap: 16px; }
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 18px; }
+  .panel-title { font-family: 'Syne', sans-serif; font-size: 0.7rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+  .legend-bar { height: 10px; border-radius: 5px; background: linear-gradient(to right, #1a2030, #7c6700, #0d7377, #14a085, #00e5a0); margin-bottom: 8px; }
+  .legend-labels { display: flex; justify-content: space-between; font-size: 0.65rem; color: var(--muted); }
+  .sources-note { font-size: 0.62rem; color: var(--muted); margin-top: 10px; line-height: 1.6; }
+  .sources-note a { color: var(--accent); text-decoration: none; }
+  .country-name { font-family: 'Syne', sans-serif; font-size: 1.1rem; font-weight: 700; margin-bottom: 16px; color: #fff; }
+  .stat-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 0.72rem; }
+  .stat-row:last-child { border-bottom: none; }
+  .stat-label { color: var(--muted); }
+  .stat-value { color: var(--text); }
+  .stat-value.hl { color: var(--accent); }
+  .top-list { display: flex; flex-direction: column; gap: 8px; }
+  .top-item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 6px; background: rgba(255,255,255,0.02); border: 1px solid transparent; cursor: pointer; transition: all 0.15s; font-size: 0.72rem; }
+  .top-item:hover { border-color: var(--border); background: rgba(0,229,255,0.05); }
+  .top-rank { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 0.65rem; color: var(--muted); width: 18px; text-align: center; }
+  .top-bar-wrap { flex: 1; }
+  .top-bar-label { margin-bottom: 3px; }
+  .top-bar-track { height: 4px; background: rgba(255,255,255,0.06); border-radius: 2px; overflow: hidden; }
+  .top-bar-fill { height: 100%; border-radius: 2px; background: linear-gradient(to right, #2196f3, #00e5ff); }
+  .top-value { color: var(--accent); font-size: 0.68rem; white-space: nowrap; }
+  .open-chart-btn { margin-top: 14px; width: 100%; padding: 9px; background: rgba(0,229,255,0.08); border: 1px solid rgba(0,229,255,0.4); color: var(--accent); border-radius: 8px; cursor: pointer; font-family: 'DM Mono', monospace; font-size: 0.72rem; transition: all .15s; }
+  .open-chart-btn:hover { background: rgba(0,229,255,0.15); }
+  #tooltip { position: fixed; background: rgba(10,14,23,0.95); border: 1px solid var(--accent); border-radius: 8px; padding: 10px 14px; font-size: 0.72rem; pointer-events: none; z-index: 999; display: none; max-width: 220px; backdrop-filter: blur(8px); }
+  #tooltip strong { font-family: 'Syne', sans-serif; font-size: 0.85rem; display: block; margin-bottom: 4px; color: #fff; }
+  .tt-row { display: flex; justify-content: space-between; gap: 16px; color: var(--muted); margin-top: 3px; }
+  .tt-val { color: var(--accent); }
+  /* Modal */
+  #modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(6px); z-index: 1000; display: none; align-items: center; justify-content: center; padding: 20px; }
+  #modal-overlay.open { display: flex; }
+  #modal-box { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; width: 100%; max-width: 860px; max-height: 92vh; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 0 80px rgba(0,229,255,0.1); animation: modalIn .2s ease; }
+  @keyframes modalIn { from{opacity:0;transform:translateY(16px);}to{opacity:1;transform:translateY(0);} }
+  #modal-header { display: flex; justify-content: space-between; align-items: flex-start; padding: 22px 24px 16px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  #modal-title { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 1.35rem; color: #fff; }
+  #modal-subtitle { font-size: 0.68rem; color: var(--muted); margin-top: 4px; }
+  #modal-source { font-size: 0.6rem; color: var(--muted); margin-top: 2px; }
+  #modal-close { background: rgba(255,255,255,0.06); border: 1px solid var(--border); color: var(--text); width: 34px; height: 34px; border-radius: 8px; cursor: pointer; font-size: 1.1rem; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: all .15s; }
+  #modal-close:hover { background: rgba(255,107,53,0.2); border-color: var(--accent2); color: var(--accent2); }
+  #modal-body { padding: 20px 24px 24px; overflow-y: auto; }
+  #modal-loading { text-align: center; padding: 60px 0; color: var(--muted); font-size: 0.8rem; }
+  .modal-spinner { width: 28px; height: 28px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; margin: 0 auto 12px; }
+  @keyframes spin { to{transform:rotate(360deg);} }
+  /* Modal sections */
+  .modal-section-title { font-family: 'Syne', sans-serif; font-size: 0.65rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
+  .chart-wrap { position: relative; height: 280px; }
+  .section-divider { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
+  /* 2-button powertrain toggle */
+  .pt-toggle { display: flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; width: fit-content; margin-bottom: 12px; }
+  .pt-btn { padding: 6px 18px; font-size: 0.7rem; cursor: pointer; border: none; background: transparent; color: var(--muted); font-family: 'DM Mono', monospace; transition: all .15s; white-space: nowrap; }
+  .pt-btn:not(:last-child) { border-right: 1px solid var(--border); }
+  .pt-btn.active { background: rgba(0,229,255,0.12); color: var(--accent); }
+  .pt-btn:hover:not(.active) { background: rgba(255,255,255,0.04); color: var(--text); }
+  .summary-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin-top: 14px; }
+  .summary-card { background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 10px; padding: 10px 6px; text-align: center; }
+  .sc-val { font-family: 'Syne', sans-serif; font-size: 0.88rem; font-weight: 700; margin-bottom: 3px; }
+  .sc-label { font-size: 0.55rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+  .sc-pct { font-size: 0.58rem; color: var(--muted); margin-top: 2px; }
+  .no-data-msg { text-align: center; padding: 50px 0; color: var(--muted); font-size: 0.8rem; line-height: 2; }
+  #map-loading { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: var(--surface); flex-direction: column; gap: 12px; z-index: 10; }
+  .spinner { width: 32px; height: 32px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; }
+  #map-loading p { font-size: 0.72rem; color: var(--muted); }
+  /* Search */
+  .search-wrap { position: relative; }
+  .search-input { width: 100%; padding: 8px 12px 8px 32px; background: rgba(255,255,255,0.04); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-family: 'DM Mono', monospace; font-size: 0.72rem; outline: none; transition: border-color .15s; }
+  .search-input::placeholder { color: var(--muted); }
+  .search-input:focus { border-color: var(--accent); background: rgba(0,229,255,0.04); }
+  .search-icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 0.75rem; pointer-events: none; }
+  .search-results { margin-top: 6px; display: flex; flex-direction: column; gap: 4px; max-height: 200px; overflow-y: auto; }
+  .search-result-item { padding: 7px 10px; border-radius: 6px; font-size: 0.72rem; cursor: pointer; border: 1px solid transparent; display: flex; justify-content: space-between; align-items: center; transition: all .12s; }
+  .search-result-item:hover { background: rgba(0,229,255,0.06); border-color: var(--border); }
+  .search-result-item .sr-name { color: var(--text); }
+  .search-result-item .sr-share { color: var(--accent); font-size: 0.65rem; }
+  @media(max-width:900px){.main-grid{grid-template-columns:1fr;}header{flex-direction:column;gap:12px;}.meta-block{align-items:flex-start;}.summary-grid{grid-template-columns:repeat(3,1fr);}}
+  @media(max-width:500px){.summary-grid{grid-template-columns:repeat(2,1fr);}}
+</style>
+</head>
+<body>
 
+<div id="tooltip">
+  <strong id="tt-name"></strong>
+  <div class="tt-row"><span>BEV share</span><span class="tt-val" id="tt-reg"></span></div>
+  <div class="tt-row"><span>Total registrations</span><span class="tt-val" id="tt-per"></span></div>
+  <div class="tt-row"><span>Source</span><span class="tt-val" id="tt-src"></span></div>
+</div>
+
+<div id="modal-overlay">
+  <div id="modal-box">
+    <div id="modal-header">
+      <div>
+        <div id="modal-title"></div>
+        <div id="modal-subtitle">New car registrations</div>
+        <div id="modal-source"></div>
+      </div>
+      <button id="modal-close" onclick="closeModal()">&#x2715;</button>
+    </div>
+    <div id="modal-body">
+      <div id="modal-loading"><div class="modal-spinner"></div>Loading&hellip;</div>
+      <div id="modal-content" style="display:none">
+
+        <!-- Monthly / Yearly total -->
+        <div class="modal-section-title" id="sec-monthly-title">&#x1F4C5; Monthly total registrations</div>
+        <div class="chart-wrap" id="wrap-monthly"><canvas id="chart-monthly"></canvas></div>
+
+        <hr class="section-divider">
+
+        <!-- Annual powertrain — 3-button toggle -->
+        <div class="modal-section-title">&#x26A1; Annual breakdown by powertrain</div>
+        <div class="pt-toggle">
+          <button class="pt-btn active" id="pt-absolute" onclick="switchPowertrain('absolute',this)">Powertrain absolute</button>
+          <button class="pt-btn" id="pt-share" onclick="switchPowertrain('share',this)">Market share %</button>
+          <button class="pt-btn" id="pt-stacked" onclick="switchPowertrain('stacked',this)">Stacked</button>
+        </div>
+        <div class="chart-wrap" id="wrap-annual"><canvas id="chart-annual"></canvas></div>
+        <div class="chart-wrap" id="wrap-stacked" style="display:none"><canvas id="chart-stacked"></canvas></div>
+        <div class="summary-grid" id="summary-grid"></div>
+
+      </div>
+      <div id="modal-nodata" style="display:none" class="no-data-msg">
+        &#x1F4ED; No data available for this country yet.<br>
+        <span style="font-size:0.68rem">ECB/ACEA covers ~30 EU/EEA countries</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+  <header>
+    <div class="title-block">
+      <h1>Global Car<br>Registrations</h1>
+      <div class="subtitle">BEV market share &middot; Colour = % electric &middot; Click for monthly &amp; powertrain detail</div>
+    </div>
+    <div class="meta-block">
+      <div class="update-badge"><span class="dot"></span><span id="last-update">Loading&hellip;</span></div>
+      <select class="year-select" id="year-select">
+        <option value="2026">2026 (Q1)</option>
+        <option value="2025">2025</option>
+        <option value="2024" selected>2024</option>
+        <option value="2023">2023</option>
+        <option value="2022">2022</option>
+        <option value="2021">2021</option>
+        <option value="2020">2020</option>
+        <option value="2019">2019</option>
+        <option value="2018">2018</option>
+        <option value="2017">2017</option>
+        <option value="2016">2016</option>
+        <option value="2015">2015</option>
+      </select>
+    </div>
+  </header>
+  <div class="main-grid">
+    <div class="map-panel">
+      <div id="map-loading"><div class="spinner"></div><p>Loading map&hellip;</p></div>
+      <svg id="map-svg" viewBox="0 0 960 500"></svg>
+      <div class="map-zoom-btns">
+        <button onclick="mapZoom(1.5)" title="Zoom in">+</button>
+        <button onclick="mapZoom(1/1.5)" title="Zoom out">&minus;</button>
+        <button class="map-zoom-reset" onclick="mapReset()" title="Reset view">⌂</button>
+      </div>
+    </div>
+    <div class="sidebar">
+      <div class="panel">
+        <div class="panel-title">Search Country</div>
+        <div class="search-wrap">
+          <span class="search-icon">&#x1F50D;</span>
+          <input class="search-input" id="country-search" type="text" placeholder="e.g. Norway, Malta, Estonia&hellip;" autocomplete="off">
+        </div>
+        <div class="search-results" id="search-results"></div>
+      </div>
+      <div class="panel">
+        <div class="panel-title">BEV Market Share &middot; % of new registrations</div>
+        <div class="legend-bar"></div>
+        <div class="legend-labels"><span>0%</span><span id="legend-mid">20%</span><span id="legend-max">50%+</span></div>
+        <div class="sources-note">
+          BEV share: <a href="https://www.acea.auto/stats/" target="_blank">ACEA</a> &middot;
+          <a href="https://www.iea.org/data-and-statistics/" target="_blank">IEA</a><br>
+          Grey = no data &middot; Click any country for monthly &amp; powertrain chart
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-title">Country Details</div>
+        <div id="detail-content" style="color:var(--muted);font-size:.72rem">&larr; Click a country for details</div>
+      </div>
+      <div class="panel">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--border)">
+          <div class="panel-title" style="margin:0;padding:0;border:none" id="top-panel-title">Top 10 &middot; BEV Share % <span id="top-year"></span></div>
+          <div class="pt-toggle" style="margin:0">
+            <button class="pt-btn active" id="top-btn-share" onclick="switchTopList('share',this)">Share %</button>
+            <button class="pt-btn" id="top-btn-volume" onclick="switchTopList('volume',this)">Volume</button>
+          </div>
+        </div>
+        <div class="top-list" id="top-share-list"></div>
+        <div class="top-list" id="top-volume-list" style="display:none"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const DATA = {
+  // Sources: ACEA (EU/EEA exact), OICA/VDA (global) — verified April 2026
+  // Note: 2026 = Q1 annualised estimate; non-EU countries in DATA for map colouring only
+  2026: {
+    "Germany":[2900000,84,"KBA"],"France":[1680000,68,"ACEA"],
+    "United Kingdom":[2020000,67,"SMMT"],"Italy":[1540000,60,"ANFIA"],
+    "Spain":[1100000,47,"ANFAC"],"Poland":[610000,38,"ACEA"],
+    "Netherlands":[390000,17,"ACEA"],"Belgium":[420000,11,"ACEA"],
+    "Sweden":[275000,10,"BIL Sweden"],"Switzerland":[245000,9,"auto-schweiz"],
+    "Austria":[285000,9,"ACEA"],"Norway":[180000,5,"OFV"],
+    "Denmark":[185000,6,"ACEA"],"Finland":[72000,6,"ACEA"],
+    "Portugal":[225000,10,"ACEA"],"Czech Republic":[250000,11,"ACEA"],
+    "China":[23000000,1412,"OICA/CAAM"],"United States":[16200000,334,"OICA"],
+    "India":[4400000,1428,"OICA"],"Japan":[4100000,124,"OICA"],
+    "Brazil":[2600000,216,"OICA"],"South Korea":[1700000,52,"OICA"],
+    "Canada":[1950000,38,"OICA"],"Russia":[1050000,144,"AEB"],
+    "Turkey":[1300000,85,"OSD"],"Australia":[1180000,26,"VFACTS"],
+    "Iceland":[3700,0.37,"Samgöngustofa"],
+    "New Zealand":[28000,5.1,"MIA NZ"],
+    "Taiwan":[110000,23.6,"MOTC"],
+    "Vietnam":[94000,99.5,"VAMA"],
+    "Philippines":[99000,116.7,"CAMPI"],
+    "Chile":[84000,19.5,"ANAC"],
+    "Colombia":[79000,52.2,"ANDEMOS"],
+    "Peru":[53000,33.5,"AAP"],
+    "UAE":[91000,10,"OICA"],
+    "United Arab Emirates":[91000,10,"OICA"],
+    "Morocco":[51000,37.5,"AIVAM"],
+    "Egypt":[64000,105,"OICA"],
+    "Tunisia":[28000,12,"CCVT"],
+    "Kenya":[4300,55,"KNBS"],
+    "Nigeria":[3600,223,"OICA"],
+    "Pakistan":[56000,240,"PAMA"],
+    "Venezuela":[5100,28.5,"CAV"],
+    "Bangladesh":[2000,172,"BRTA"],
+    "Saudi Arabia":[170000,36.4,"OICA/SAAMA"],
+    "Bulgaria":[12500,6.5,"ACEA"],
+    "Croatia":[17700,3.9,"ACEA"],
+    "Cyprus":[3700,1.2,"ACEA"],
+    "Estonia":[3300,1.4,"ACEA"],
+    "Greece":[36500,10.4,"ACEA"],
+    "Hungary":[32700,9.7,"ACEA"],
+    "Ireland":[31600,5.2,"SIMI"],
+    "Latvia":[5700,1.8,"ACEA"],
+    "Lithuania":[10600,2.8,"ACEA"],
+    "Luxembourg":[12000,0.68,"ACEA"],
+    "Malta":[1600,0.53,"ACEA"],
+    "Romania":[39600,19.0,"ACEA"],
+    "Slovakia":[23600,5.5,"ACEA"],
+    "Slovenia":[14600,2.1,"ACEA"]
+  },
+  2025: {
+    "Germany":[2858000,84,"KBA"],"France":[1632000,68,"ACEA"],
+    "United Kingdom":[2021000,67,"SMMT"],"Italy":[1525000,60,"ANFIA"],
+    "Spain":[1149000,47,"ANFAC"],"Poland":[597000,38,"ACEA"],
+    "Netherlands":[388000,17,"ACEA"],"Belgium":[415000,11,"ACEA"],
+    "Sweden":[273000,10,"BIL Sweden"],"Switzerland":[234000,9,"auto-schweiz"],
+    "Austria":[285000,9,"ACEA"],"Norway":[180000,5,"OFV"],
+    "Denmark":[185000,6,"ACEA"],"Finland":[72000,6,"ACEA"],
+    "Portugal":[225000,10,"ACEA"],"Czech Republic":[249000,11,"ACEA"],
+    "China":[22500000,1412,"OICA/CAAM"],"United States":[16200000,334,"OICA"],
+    "India":[4400000,1428,"OICA"],"Japan":[4100000,124,"OICA"],
+    "Brazil":[2600000,216,"OICA"],"South Korea":[1700000,52,"OICA"],
+    "Canada":[1950000,38,"OICA"],"Russia":[1050000,144,"AEB"],
+    "Turkey":[1300000,85,"OSD"],"Australia":[1180000,26,"VFACTS"],
+    "Iceland":[14547,0.37,"Samgöngustofa"],
+    "New Zealand":[110000,5.1,"MIA NZ"],
+    "Taiwan":[430000,23.6,"MOTC"],
+    "Vietnam":[370000,99.5,"VAMA"],
+    "Philippines":[390000,116.7,"CAMPI"],
+    "Chile":[330000,19.5,"ANAC"],
+    "Colombia":[310000,52.2,"ANDEMOS"],
+    "Peru":[210000,33.5,"AAP"],
+    "UAE":[360000,10,"OICA"],
+    "United Arab Emirates":[360000,10,"OICA"],
+    "Morocco":[200000,37.5,"AIVAM"],
+    "Egypt":[250000,105,"OICA"],
+    "Tunisia":[110000,12,"CCVT"],
+    "Kenya":[17000,55,"KNBS"],
+    "Nigeria":[14000,223,"OICA"],
+    "Pakistan":[220000,240,"PAMA"],
+    "Venezuela":[20000,28.5,"CAV"],
+    "Bangladesh":[8000,172,"BRTA"],
+    "Saudi Arabia":[670000,36.4,"OICA/SAAMA"],
+    "Bulgaria":[49419,6.5,"ACEA"],
+    "Croatia":[69841,3.9,"ACEA"],
+    "Cyprus":[14634,1.2,"ACEA"],
+    "Estonia":[13055,1.4,"ACEA"],
+    "Greece":[144199,10.4,"ACEA"],
+    "Hungary":[129440,9.7,"ACEA"],
+    "Ireland":[124954,5.2,"SIMI"],
+    "Latvia":[22506,1.8,"ACEA"],
+    "Lithuania":[41974,2.8,"ACEA"],
+    "Luxembourg":[47158,0.68,"ACEA"],
+    "Malta":[6468,0.53,"ACEA"],
+    "Romania":[156803,19.0,"ACEA"],
+    "Slovakia":[93103,5.5,"ACEA"],
+    "Slovenia":[57556,2.1,"ACEA"]
+  },
+  2024: {
+    "China":[22000000,1412,"OICA/CAAM"],"United States":[15940000,334,"OICA/Wards"],
+    "India":[4270000,1428,"OICA/SIAM"],"Japan":[4250000,124,"OICA/JAMA"],
+    "Germany":[2817000,84,"KBA"],"Brazil":[2480000,216,"OICA/ANFAVEA"],
+    "United Kingdom":[1953000,67,"SMMT"],"France":[1718000,68,"ACEA"],
+    "South Korea":[1680000,52,"OICA/KAMA"],"Italy":[1559000,60,"ANFIA"],
+    "Canada":[1900000,38,"OICA"],"Spain":[1017000,47,"ANFAC"],
+    "Mexico":[1450000,128,"OICA/AMIA"],"Australia":[1160000,26,"VFACTS"],
+    "Russia":[980000,144,"AEB"],"Turkey":[1250000,85,"OSD"],
+    "Indonesia":[1000000,278,"Gaikindo"],"Malaysia":[800000,33,"MAA"],
+    "Iran":[900000,87,"OICA"],"Thailand":[700000,72,"TAI"],
+    "Argentina":[450000,46,"ADEFA"],"South Africa":[560000,60,"NAAMSA"],
+    "Saudi Arabia":[650000,36,"OICA"],"Poland":[552000,38,"ACEA"],
+    "Netherlands":[381000,17,"ACEA"],"Belgium":[448000,11,"ACEA"],
+    "Sweden":[270000,10,"BIL Sweden"],"Switzerland":[240000,9,"auto-schweiz"],
+    "Austria":[254000,9,"ACEA"],"Norway":[129000,5,"OFV"],
+    "Denmark":[173000,6,"ACEA"],"Finland":[74000,6,"ACEA"],
+    "Portugal":[210000,10,"ACEA"],"Czech Republic":[232000,11,"ACEA"],
+    "Iceland":[10233,0.37,"Samgöngustofa"],"New Zealand":[107000,5.1,"MIA NZ"],
+    "Taiwan":[440000,23.6,"MOTC"],"Vietnam":[350000,99.5,"VAMA"],
+    "Philippines":[380000,116.7,"CAMPI"],"Chile":[320000,19.5,"ANAC"],
+    "Colombia":[300000,52.2,"ANDEMOS"],"Peru":[200000,33.5,"AAP"],
+    "UAE":[350000,10,"OICA"],"United Arab Emirates":[350000,10,"OICA"],
+    "Morocco":[185000,37.5,"AIVAM"],"Egypt":[200000,105,"OICA"],
+    "Tunisia":[105000,12,"CCVT"],"Kenya":[16000,55,"KNBS"],
+    "Nigeria":[13000,223,"OICA"],"Pakistan":[170000,240,"PAMA"],
+    "Venezuela":[18000,28.5,"CAV"],"Bangladesh":[7500,172,"BRTA"],
+    "Bulgaria":[42941,6.5,"ACEA"],
+    "Croatia":[65020,3.9,"ACEA"],
+    "Cyprus":[15057,1.2,"ACEA"],
+    "Estonia":[25386,1.4,"ACEA"],
+    "Greece":[137075,10.4,"ACEA"],
+    "Hungary":[121611,9.7,"ACEA"],
+    "Ireland":[121196,5.1,"SIMI"],
+    "Latvia":[17329,1.8,"ACEA"],
+    "Lithuania":[30122,2.8,"ACEA"],
+    "Luxembourg":[46659,0.67,"ACEA"],
+    "Malta":[7663,0.53,"ACEA"],
+    "Romania":[151105,19.0,"ACEA"],
+    "Slovakia":[93409,5.5,"ACEA"],
+    "Slovenia":[53018,2.1,"ACEA"]
+  },
+  2023: {
+    "China":[21400000,1412,"OICA/CAAM"],"United States":[15600000,334,"OICA/Wards"],
+    "India":[4100000,1428,"OICA/SIAM"],"Japan":[4780000,124,"OICA/JAMA"],
+    "Germany":[2845000,84,"KBA"],"Brazil":[2200000,216,"OICA/ANFAVEA"],
+    "United Kingdom":[1903000,67,"SMMT"],"France":[1775000,68,"ACEA"],
+    "South Korea":[1700000,52,"OICA/KAMA"],"Italy":[1567000,60,"ANFIA"],
+    "Canada":[1840000,38,"OICA"],"Spain":[949000,47,"ANFAC"],
+    "Mexico":[1400000,128,"OICA/AMIA"],"Australia":[1200000,26,"VFACTS"],
+    "Russia":[1020000,144,"AEB"],"Turkey":[1200000,85,"OSD"],
+    "Indonesia":[1010000,278,"Gaikindo"],"Thailand":[750000,72,"TAI"],
+    "Malaysia":[780000,33,"MAA"],"South Africa":[540000,60,"NAAMSA"],
+    "Iran":[870000,87,"OICA"],"Poland":[475000,38,"ACEA"],
+    "Netherlands":[370000,17,"ACEA"],"Belgium":[477000,11,"ACEA"],
+    "Sweden":[290000,10,"BIL Sweden"],"Switzerland":[252000,9,"auto-schweiz"],
+    "Austria":[239000,9,"ACEA"],"Norway":[127000,5,"OFV"],
+    "Denmark":[173000,6,"ACEA"],"Finland":[88000,6,"ACEA"],
+    "Portugal":[200000,10,"ACEA"],"Czech Republic":[221000,11,"ACEA"],
+    "Iceland":[17543,0.37,"Samgöngustofa"],
+    "New Zealand":[115000,5.1,"MIA NZ"],
+    "Taiwan":[430000,23.6,"MOTC"],
+    "Vietnam":[363000,99.5,"VAMA"],
+    "Philippines":[370000,116.7,"CAMPI"],
+    "Chile":[348000,19.5,"ANAC"],
+    "Colombia":[289000,52.2,"ANDEMOS"],
+    "Peru":[195000,33.5,"AAP"],
+    "UAE":[330000,10,"OICA"],
+    "United Arab Emirates":[330000,10,"OICA"],
+    "Morocco":[173000,37.5,"AIVAM"],
+    "Egypt":[128000,105,"OICA"],
+    "Tunisia":[100000,12,"CCVT"],
+    "Kenya":[15000,55,"KNBS"],
+    "Nigeria":[12000,223,"OICA"],
+    "Pakistan":[133000,240,"PAMA"],
+    "Venezuela":[15000,28.5,"CAV"],
+    "Bangladesh":[7000,172,"BRTA"],
+    "Saudi Arabia":[646000,36.4,"OICA/SAAMA"],
+    "Bulgaria":[37724,6.5,"ACEA"],
+    "Croatia":[57694,3.9,"ACEA"],
+    "Cyprus":[14740,1.2,"ACEA"],
+    "Estonia":[22820,1.4,"ACEA"],
+    "Greece":[134484,10.5,"ACEA"],
+    "Hungary":[107720,9.7,"ACEA"],
+    "Ireland":[122400,5.1,"SIMI"],
+    "Latvia":[18928,1.9,"ACEA"],
+    "Lithuania":[27666,2.8,"ACEA"],
+    "Luxembourg":[49105,0.66,"ACEA"],
+    "Malta":[7436,0.52,"ACEA"],
+    "Romania":[143080,19.0,"ACEA"],
+    "Slovakia":[88003,5.5,"ACEA"],
+    "Slovenia":[48924,2.1,"ACEA"]
+  },
+  2022: {
+    "China":[19600000,1412,"OICA/CAAM"],"United States":[13760000,334,"OICA/Wards"],
+    "India":[4720000,1380,"OICA/SIAM"],"Japan":[4200000,124,"OICA/JAMA"],
+    "Germany":[2650000,84,"KBA"],"Brazil":[2100000,215,"OICA/ANFAVEA"],
+    "United Kingdom":[1610000,67,"SMMT"],"France":[1530000,68,"ACEA"],
+    "South Korea":[1690000,52,"OICA/KAMA"],"Italy":[1310000,60,"ANFIA"],
+    "Canada":[1550000,38,"OICA"],"Spain":[860000,47,"ANFAC"],
+    "Mexico":[1080000,128,"OICA/AMIA"],"Australia":[1080000,26,"VFACTS"],
+    "Russia":[690000,144,"AEB"],"Turkey":[980000,85,"OSD"],
+    "Indonesia":[1050000,278,"Gaikindo"],"Thailand":[850000,72,"TAI"],
+    "Malaysia":[730000,33,"MAA"],"South Africa":[490000,60,"NAAMSA"],
+    "Iran":[800000,87,"OICA"],"Poland":[420000,38,"ACEA"],
+    "Netherlands":[350000,17,"ACEA"],"Sweden":[270000,10,"BIL Sweden"],
+    "Norway":[140000,5,"OFV"],"Switzerland":[260000,9,"auto-schweiz"],
+    "Austria":[240000,9,"ACEA"],"Denmark":[170000,6,"ACEA"],
+    "Finland":[95000,6,"ACEA"],"Portugal":[190000,10,"ACEA"],
+    "Czech Republic":[210000,11,"ACEA"],
+    "Iceland":[17543,0.37,"Samgöngustofa"],
+    "New Zealand":[107000,5.1,"MIA NZ"],
+    "Taiwan":[430000,23.6,"MOTC"],
+    "Vietnam":[398000,99.5,"VAMA"],
+    "Philippines":[355000,116.7,"CAMPI"],
+    "Chile":[313000,19.5,"ANAC"],
+    "Colombia":[273000,52.2,"ANDEMOS"],
+    "Peru":[186000,33.5,"AAP"],
+    "UAE":[310000,10,"OICA"],
+    "United Arab Emirates":[310000,10,"OICA"],
+    "Morocco":[167000,37.5,"AIVAM"],
+    "Egypt":[245000,105,"OICA"],
+    "Tunisia":[95000,12,"CCVT"],
+    "Kenya":[14000,55,"KNBS"],
+    "Nigeria":[12000,223,"OICA"],
+    "Pakistan":[285000,240,"PAMA"],
+    "Venezuela":[12000,28.5,"CAV"],
+    "Bangladesh":[6500,172,"BRTA"],
+    "Saudi Arabia":[610000,36.4,"OICA/SAAMA"],
+    "Bulgaria":[42000,7.0,"ACEA"],
+    "Croatia":[68000,3.9,"ACEA"],
+    "Cyprus":[14740,1.2,"ACEA"],
+    "Estonia":[28000,1.4,"ACEA"],
+    "Greece":[115000,10.6,"ACEA"],
+    "Hungary":[115000,9.7,"ACEA"],
+    "Ireland":[110000,5.1,"SIMI"],
+    "Latvia":[24000,1.9,"ACEA"],
+    "Lithuania":[52000,2.8,"ACEA"],
+    "Luxembourg":[47000,0.65,"ACEA"],
+    "Malta":[22000,0.51,"ACEA"],
+    "Romania":[137000,19.0,"ACEA"],
+    "Slovakia":[110000,5.5,"ACEA"],
+    "Slovenia":[48000,2.1,"ACEA"]
+  },
+  2021: {
+    "China":[21480000,1412,"OICA/CAAM"],"United States":[15400000,334,"OICA/Wards"],
+    "Germany":[2620000,84,"KBA"],"Japan":[4440000,124,"OICA/JAMA"],
+    "India":[3290000,1380,"OICA/SIAM"],"United Kingdom":[1650000,67,"SMMT"],
+    "France":[1660000,68,"ACEA"],"South Korea":[1740000,52,"OICA/KAMA"],
+    "Italy":[1460000,60,"ANFIA"],"Canada":[1660000,38,"OICA"],
+    "Spain":[860000,47,"ANFAC"],"Brazil":[2110000,215,"OICA/ANFAVEA"],
+    "Australia":[914000,26,"VFACTS"],"Mexico":[1080000,128,"OICA/AMIA"],
+    "Turkey":[970000,85,"OSD"],"Russia":[1670000,144,"AEB"],
+    "Netherlands":[400000,17,"ACEA"],"Sweden":[300000,10,"BIL Sweden"],
+    "Belgium":[530000,11,"ACEA"],"Switzerland":[300000,9,"auto-schweiz"],
+    "Austria":[248000,9,"ACEA"],"Norway":[176000,5,"OFV"],
+    "Denmark":[213000,6,"ACEA"],"Poland":[500000,38,"ACEA"],
+    "Portugal":[196000,10,"ACEA"],"Finland":[120000,6,"ACEA"],
+    "Czech Republic":[213000,11,"ACEA"],
+    "Iceland":[14500,0.37,"Samgöngustofa"],
+    "New Zealand":[120000,5.1,"MIA NZ"],
+    "Taiwan":[388000,23.6,"MOTC"],
+    "Vietnam":[283000,99.5,"VAMA"],
+    "Philippines":[282000,116.7,"CAMPI"],
+    "Chile":[289000,19.5,"ANAC"],
+    "Colombia":[204000,52.2,"ANDEMOS"],
+    "Peru":[153000,33.5,"AAP"],
+    "UAE":[260000,10,"OICA"],
+    "United Arab Emirates":[260000,10,"OICA"],
+    "Morocco":[144000,37.5,"AIVAM"],
+    "Egypt":[230000,105,"OICA"],
+    "Tunisia":[85000,12,"CCVT"],
+    "Kenya":[11000,55,"KNBS"],
+    "Nigeria":[10000,223,"OICA"],
+    "Pakistan":[218000,240,"PAMA"],
+    "Venezuela":[10000,28.5,"CAV"],
+    "Bangladesh":[5500,172,"BRTA"],
+    "Saudi Arabia":[580000,36.4,"OICA/SAAMA"],
+    "Bulgaria":[38000,7.0,"ACEA"],
+    "Croatia":[72000,3.9,"ACEA"],
+    "Cyprus":[11000,1.2,"ACEA"],
+    "Estonia":[27000,1.4,"ACEA"],
+    "Greece":[105000,10.7,"ACEA"],
+    "Hungary":[105000,9.7,"ACEA"],
+    "Ireland":[100000,5.1,"SIMI"],
+    "Latvia":[20000,1.9,"ACEA"],
+    "Lithuania":[46000,2.8,"ACEA"],
+    "Luxembourg":[48000,0.65,"ACEA"],
+    "Malta":[19000,0.51,"ACEA"],
+    "Romania":[145000,19.0,"ACEA"],
+    "Slovakia":[105000,5.5,"ACEA"],
+    "Slovenia":[53000,2.1,"ACEA"]
+  },
+  2020: {
+    "China":[19994000,1412,"OICA/CAAM"],"United States":[14500000,334,"OICA/Wards"],
+    "Germany":[2917000,84,"KBA"],"Japan":[4600000,124,"OICA/JAMA"],
+    "India":[2900000,1380,"OICA/SIAM"],"United Kingdom":[1630000,67,"SMMT"],
+    "France":[1650000,68,"ACEA"],"South Korea":[1900000,52,"OICA/KAMA"],
+    "Italy":[1382000,60,"ANFIA"],"Canada":[1550000,38,"OICA"],
+    "Spain":[851000,47,"ANFAC"],"Brazil":[2060000,215,"OICA/ANFAVEA"],
+    "Australia":[917000,26,"VFACTS"],"Mexico":[950000,128,"OICA/AMIA"],
+    "Turkey":[860000,85,"OSD"],"Russia":[1600000,144,"AEB"],
+    "Netherlands":[443000,17,"ACEA"],"Sweden":[290000,10,"BIL Sweden"],
+    "Belgium":[452000,11,"ACEA"],"Switzerland":[310000,9,"auto-schweiz"],
+    "Austria":[247000,9,"ACEA"],"Norway":[141000,5,"OFV"],
+    "Denmark":[217000,6,"ACEA"],"Poland":[427000,38,"ACEA"],
+    "Portugal":[161000,10,"ACEA"],"Finland":[107000,6,"ACEA"],
+    "Czech Republic":[193000,11,"ACEA"],
+    "Iceland":[9100,0.37,"Samgöngustofa"],
+    "New Zealand":[112000,5.1,"MIA NZ"],
+    "Taiwan":[415000,23.6,"MOTC"],
+    "Vietnam":[297000,99.5,"VAMA"],
+    "Philippines":[182000,116.7,"CAMPI"],
+    "Chile":[213000,19.5,"ANAC"],
+    "Colombia":[142000,52.2,"ANDEMOS"],
+    "Peru":[87000,33.5,"AAP"],
+    "UAE":[215000,10,"OICA"],
+    "United Arab Emirates":[215000,10,"OICA"],
+    "Morocco":[101000,37.5,"AIVAM"],
+    "Egypt":[195000,105,"OICA"],
+    "Tunisia":[66000,12,"CCVT"],
+    "Kenya":[9000,55,"KNBS"],
+    "Nigeria":[8000,223,"OICA"],
+    "Pakistan":[141000,240,"PAMA"],
+    "Venezuela":[8000,28.5,"CAV"],
+    "Bangladesh":[4000,172,"BRTA"],
+    "Saudi Arabia":[455000,36.4,"OICA/SAAMA"],
+    "Bulgaria":[32000,7.0,"ACEA"],
+    "Croatia":[65000,4.0,"ACEA"],
+    "Cyprus":[10000,1.2,"ACEA"],
+    "Estonia":[24000,1.4,"ACEA"],
+    "Greece":[90000,10.7,"ACEA"],
+    "Hungary":[90000,9.8,"ACEA"],
+    "Ireland":[95000,5.0,"SIMI"],
+    "Latvia":[16000,1.9,"ACEA"],
+    "Lithuania":[36000,2.8,"ACEA"],
+    "Luxembourg":[49000,0.6,"ACEA"],
+    "Malta":[17000,0.5,"ACEA"],
+    "Romania":[130000,19.0,"ACEA"],
+    "Slovakia":[95000,5.5,"ACEA"],
+    "Slovenia":[49000,2.1,"ACEA"]
+  },
+  2019: {
+    "China":[21440000,1412,"OICA/CAAM"],"United States":[17100000,334,"OICA/Wards"],
+    "Germany":[3607000,84,"KBA"],"Japan":[5200000,124,"OICA/JAMA"],
+    "India":[3800000,1380,"OICA/SIAM"],"United Kingdom":[2311000,67,"SMMT"],
+    "France":[2211000,68,"ACEA"],"South Korea":[1800000,52,"OICA/KAMA"],
+    "Italy":[1916000,60,"ANFIA"],"Canada":[1950000,38,"OICA"],
+    "Spain":[1253000,47,"ANFAC"],"Brazil":[2770000,215,"OICA/ANFAVEA"],
+    "Australia":[1062000,26,"VFACTS"],"Mexico":[1320000,128,"OICA/AMIA"],
+    "Turkey":[492000,85,"OSD"],"Russia":[1760000,144,"AEB"],
+    "Netherlands":[443000,17,"ACEA"],"Sweden":[356000,10,"BIL Sweden"],
+    "Belgium":[551000,11,"ACEA"],"Switzerland":[316000,9,"auto-schweiz"],
+    "Austria":[331000,9,"ACEA"],"Norway":[142000,5,"OFV"],
+    "Denmark":[222000,6,"ACEA"],"Poland":[517000,38,"ACEA"],
+    "Portugal":[226000,10,"ACEA"],"Finland":[120000,6,"ACEA"],
+    "Czech Republic":[239000,11,"ACEA"],
+    "Iceland":[11820,0.37,"Samgöngustofa"],
+    "New Zealand":[155000,5.1,"MIA NZ"],
+    "Taiwan":[438000,23.6,"MOTC"],
+    "Vietnam":[322000,99.5,"VAMA"],
+    "Philippines":[367000,116.7,"CAMPI"],
+    "Chile":[368000,19.5,"ANAC"],
+    "Colombia":[235000,52.2,"ANDEMOS"],
+    "Peru":[185000,33.5,"AAP"],
+    "UAE":[290000,10,"OICA"],
+    "United Arab Emirates":[290000,10,"OICA"],
+    "Morocco":[160000,37.5,"AIVAM"],
+    "Egypt":[250000,105,"OICA"],
+    "Tunisia":[93000,12,"CCVT"],
+    "Kenya":[14000,55,"KNBS"],
+    "Nigeria":[14000,223,"OICA"],
+    "Pakistan":[192000,240,"PAMA"],
+    "Venezuela":[30000,28.5,"CAV"],
+    "Bangladesh":[8000,172,"BRTA"],
+    "Saudi Arabia":[615000,36.4,"OICA/SAAMA"],
+    "Bulgaria":[38000,7.0,"ACEA"],
+    "Croatia":[81000,4.0,"ACEA"],
+    "Cyprus":[13000,1.2,"ACEA"],
+    "Estonia":[32000,1.4,"ACEA"],
+    "Greece":[110000,10.7,"ACEA"],
+    "Hungary":[110000,9.8,"ACEA"],
+    "Ireland":[122000,5.0,"SIMI"],
+    "Latvia":[24000,1.9,"ACEA"],
+    "Lithuania":[48000,2.8,"ACEA"],
+    "Luxembourg":[62000,0.6,"ACEA"],
+    "Malta":[23000,0.49,"ACEA"],
+    "Romania":[160000,19.2,"ACEA"],
+    "Slovakia":[110000,5.5,"ACEA"],
+    "Slovenia":[65000,2.1,"ACEA"]
+  },
+  2018: {
+    "China":[23560000,1412,"OICA/CAAM"],"United States":[17700000,334,"OICA/Wards"],
+    "Germany":[3436000,84,"KBA"],"Japan":[5270000,124,"OICA/JAMA"],
+    "India":[3387000,1380,"OICA/SIAM"],"United Kingdom":[2367000,67,"SMMT"],
+    "France":[2173000,68,"ACEA"],"South Korea":[1830000,52,"OICA/KAMA"],
+    "Italy":[1910000,60,"ANFIA"],"Canada":[1990000,38,"OICA"],
+    "Spain":[1321000,47,"ANFAC"],"Brazil":[2500000,215,"OICA/ANFAVEA"],
+    "Australia":[1153000,26,"VFACTS"],"Mexico":[1290000,128,"OICA/AMIA"],
+    "Turkey":[635000,85,"OSD"],"Russia":[1800000,144,"AEB"],
+    "Netherlands":[443000,17,"ACEA"],"Sweden":[357000,10,"BIL Sweden"],
+    "Belgium":[550000,11,"ACEA"],"Switzerland":[320000,9,"auto-schweiz"],
+    "Austria":[338000,9,"ACEA"],"Norway":[147000,5,"OFV"],
+    "Denmark":[230000,6,"ACEA"],"Poland":[478000,38,"ACEA"],
+    "Portugal":[203000,10,"ACEA"],"Finland":[120000,6,"ACEA"],
+    "Czech Republic":[253000,11,"ACEA"],
+    "Iceland":[17978,0.37,"Samgöngustofa"],
+    "New Zealand":[154000,5.1,"MIA NZ"],
+    "Taiwan":[450000,23.6,"MOTC"],
+    "Vietnam":[289000,99.5,"VAMA"],
+    "Philippines":[456000,116.7,"CAMPI"],
+    "Chile":[403000,19.5,"ANAC"],
+    "Colombia":[245000,52.2,"ANDEMOS"],
+    "Peru":[186000,33.5,"AAP"],
+    "UAE":[255000,10,"OICA"],
+    "United Arab Emirates":[255000,10,"OICA"],
+    "Morocco":[163000,37.5,"AIVAM"],
+    "Egypt":[230000,105,"OICA"],
+    "Tunisia":[102000,12,"CCVT"],
+    "Kenya":[15000,55,"KNBS"],
+    "Nigeria":[14000,223,"OICA"],
+    "Pakistan":[285000,240,"PAMA"],
+    "Venezuela":[15000,28.5,"CAV"],
+    "Bangladesh":[7500,172,"BRTA"],
+    "Saudi Arabia":[578000,36.4,"OICA/SAAMA"],
+    "Bulgaria":[35000,7.0,"ACEA"],
+    "Croatia":[76000,4.0,"ACEA"],
+    "Cyprus":[12000,1.2,"ACEA"],
+    "Estonia":[30000,1.4,"ACEA"],
+    "Greece":[105000,10.7,"ACEA"],
+    "Hungary":[105000,9.8,"ACEA"],
+    "Ireland":[120000,5.0,"SIMI"],
+    "Latvia":[23000,1.9,"ACEA"],
+    "Lithuania":[44000,2.8,"ACEA"],
+    "Luxembourg":[64000,0.6,"ACEA"],
+    "Malta":[22000,0.48,"ACEA"],
+    "Romania":[155000,19.4,"ACEA"],
+    "Slovakia":[105000,5.5,"ACEA"],
+    "Slovenia":[62000,2.1,"ACEA"]
+  },
+  2017: {
+    "China":[24720000,1412,"OICA/CAAM"],"United States":[17200000,334,"OICA/Wards"],
+    "Germany":[3441000,84,"KBA"],"Japan":[5230000,124,"OICA/JAMA"],
+    "India":[3287000,1380,"OICA/SIAM"],"United Kingdom":[2540000,67,"SMMT"],
+    "France":[2113000,68,"ACEA"],"South Korea":[1800000,52,"OICA/KAMA"],
+    "Italy":[1971000,60,"ANFIA"],"Canada":[2000000,38,"OICA"],
+    "Spain":[1234000,47,"ANFAC"],"Brazil":[2240000,215,"OICA/ANFAVEA"],
+    "Australia":[1189000,26,"VFACTS"],"Mexico":[1588000,128,"OICA/AMIA"],
+    "Turkey":[682000,85,"OSD"],"Russia":[1596000,144,"AEB"],
+    "Netherlands":[397000,17,"ACEA"],"Sweden":[379000,10,"BIL Sweden"],
+    "Belgium":[563000,11,"ACEA"],"Switzerland":[327000,9,"auto-schweiz"],
+    "Austria":[362000,9,"ACEA"],"Norway":[150000,5,"OFV"],
+    "Denmark":[221000,6,"ACEA"],"Poland":[486000,38,"ACEA"],
+    "Portugal":[195000,10,"ACEA"],"Finland":[118000,6,"ACEA"],
+    "Czech Republic":[255000,11,"ACEA"],
+    "Iceland":[21213,0.37,"Samgöngustofa"],
+    "New Zealand":[154000,5.1,"MIA NZ"],
+    "Taiwan":[432000,23.6,"MOTC"],
+    "Vietnam":[272000,99.5,"VAMA"],
+    "Philippines":[414000,116.7,"CAMPI"],
+    "Chile":[372000,19.5,"ANAC"],
+    "Colombia":[215000,52.2,"ANDEMOS"],
+    "Peru":[165000,33.5,"AAP"],
+    "UAE":[250000,10,"OICA"],
+    "United Arab Emirates":[250000,10,"OICA"],
+    "Morocco":[161000,37.5,"AIVAM"],
+    "Egypt":[210000,105,"OICA"],
+    "Tunisia":[102000,12,"CCVT"],
+    "Kenya":[15000,55,"KNBS"],
+    "Nigeria":[12000,223,"OICA"],
+    "Pakistan":[248000,240,"PAMA"],
+    "Venezuela":[18000,28.5,"CAV"],
+    "Bangladesh":[7000,172,"BRTA"],
+    "Saudi Arabia":[572000,36.4,"OICA/SAAMA"],
+    "Bulgaria":[32000,7.0,"ACEA"],
+    "Croatia":[70000,4.1,"ACEA"],
+    "Cyprus":[11000,1.2,"ACEA"],
+    "Estonia":[28000,1.4,"ACEA"],
+    "Greece":[95000,10.8,"ACEA"],
+    "Hungary":[95000,9.8,"ACEA"],
+    "Ireland":[164000,4.9,"SIMI"],
+    "Latvia":[21000,2.0,"ACEA"],
+    "Lithuania":[40000,2.9,"ACEA"],
+    "Luxembourg":[60000,0.6,"ACEA"],
+    "Malta":[21000,0.47,"ACEA"],
+    "Romania":[140000,19.6,"ACEA"],
+    "Slovakia":[98000,5.4,"ACEA"],
+    "Slovenia":[58000,2.1,"ACEA"]
+  },
+  2016: {
+    "China":[24380000,1412,"OICA/CAAM"],"United States":[17900000,334,"OICA/Wards"],
+    "Germany":[3352000,84,"KBA"],"Japan":[4970000,124,"OICA/JAMA"],
+    "India":[3047000,1380,"OICA/SIAM"],"United Kingdom":[2692000,67,"SMMT"],
+    "France":[2015000,68,"ACEA"],"South Korea":[1820000,52,"OICA/KAMA"],
+    "Italy":[1825000,60,"ANFIA"],"Canada":[1950000,38,"OICA"],
+    "Spain":[1147000,47,"ANFAC"],"Brazil":[2050000,215,"OICA/ANFAVEA"],
+    "Australia":[1178000,26,"VFACTS"],"Mexico":[1643000,128,"OICA/AMIA"],
+    "Turkey":[916000,85,"OSD"],"Russia":[1426000,144,"AEB"],
+    "Netherlands":[389000,17,"ACEA"],"Sweden":[374000,10,"BIL Sweden"],
+    "Belgium":[561000,11,"ACEA"],"Switzerland":[319000,9,"auto-schweiz"],
+    "Austria":[357000,9,"ACEA"],"Norway":[150000,5,"OFV"],
+    "Denmark":[213000,6,"ACEA"],"Poland":[479000,38,"ACEA"],
+    "Portugal":[187000,10,"ACEA"],"Finland":[122000,6,"ACEA"],
+    "Czech Republic":[247000,11,"ACEA"],
+    "Iceland":[18509,0.37,"Samgöngustofa"],
+    "New Zealand":[148000,5.1,"MIA NZ"],
+    "Taiwan":[415000,23.6,"MOTC"],
+    "Vietnam":[304000,99.5,"VAMA"],
+    "Philippines":[359000,116.7,"CAMPI"],
+    "Chile":[330000,19.5,"ANAC"],
+    "Colombia":[219000,52.2,"ANDEMOS"],
+    "Peru":[160000,33.5,"AAP"],
+    "UAE":[260000,10,"OICA"],
+    "United Arab Emirates":[260000,10,"OICA"],
+    "Morocco":[148000,37.5,"AIVAM"],
+    "Egypt":[200000,105,"OICA"],
+    "Tunisia":[100000,12,"CCVT"],
+    "Kenya":[15000,55,"KNBS"],
+    "Nigeria":[12000,223,"OICA"],
+    "Pakistan":[220000,240,"PAMA"],
+    "Venezuela":[35000,28.5,"CAV"],
+    "Bangladesh":[6500,172,"BRTA"],
+    "Saudi Arabia":[610000,36.4,"OICA/SAAMA"],
+    "Bulgaria":[28000,7.0,"ACEA"],
+    "Croatia":[63000,4.1,"ACEA"],
+    "Cyprus":[10000,1.2,"ACEA"],
+    "Estonia":[27000,1.4,"ACEA"],
+    "Greece":[85000,10.8,"ACEA"],
+    "Hungary":[85000,9.8,"ACEA"],
+    "Ireland":[148000,4.8,"SIMI"],
+    "Latvia":[21000,2.0,"ACEA"],
+    "Lithuania":[38000,2.9,"ACEA"],
+    "Luxembourg":[56000,0.6,"ACEA"],
+    "Malta":[19000,0.46,"ACEA"],
+    "Romania":[126000,19.8,"ACEA"],
+    "Slovakia":[92000,5.4,"ACEA"],
+    "Slovenia":[52000,2.1,"ACEA"]
+  },
+  2015: {
+    "China":[21100000,1374,"OICA/CAAM"],"United States":[17470000,321,"OICA/Wards"],
+    "Germany":[3206000,82,"KBA"],"Japan":[5046000,127,"OICA/JAMA"],
+    "India":[2790000,1310,"OICA/SIAM"],"United Kingdom":[2633000,65,"SMMT"],
+    "France":[1917000,67,"ACEA"],"South Korea":[1832000,51,"OICA/KAMA"],
+    "Italy":[1576000,61,"ANFIA"],"Canada":[1896000,36,"OICA"],
+    "Spain":[1034000,46,"ANFAC"],"Brazil":[2566000,208,"OICA/ANFAVEA"],
+    "Australia":[1155000,24,"VFACTS"],"Mexico":[1351000,121,"OICA/AMIA"],
+    "Turkey":[868000,79,"OSD"],"Russia":[1601000,144,"AEB"],
+    "Netherlands":[449000,17,"ACEA"],"Sweden":[381000,10,"BIL Sweden"],
+    "Belgium":[553000,11,"ACEA"],"Switzerland":[340000,8,"auto-schweiz"],
+    "Austria":[356000,9,"ACEA"],"Norway":[153000,5,"OFV"],
+    "Denmark":[225000,6,"ACEA"],"Poland":[362000,38,"ACEA"],
+    "Portugal":[162000,10,"ACEA"],"Finland":[105000,6,"ACEA"],
+    "Czech Republic":[255000,11,"ACEA"],
+    "Iceland":[14029,0.37,"Samgöngustofa"],
+    "New Zealand":[125000,5.1,"MIA NZ"],
+    "Taiwan":[420000,23.6,"MOTC"],
+    "Vietnam":[244000,99.5,"VAMA"],
+    "Philippines":[288000,116.7,"CAMPI"],
+    "Chile":[338000,19.5,"ANAC"],
+    "Colombia":[239000,52.2,"ANDEMOS"],
+    "Peru":[180000,33.5,"AAP"],
+    "UAE":[280000,10,"OICA"],
+    "United Arab Emirates":[280000,10,"OICA"],
+    "Morocco":[132000,37.5,"AIVAM"],
+    "Egypt":[250000,105,"OICA"],
+    "Tunisia":[95000,12,"CCVT"],
+    "Kenya":[14000,55,"KNBS"],
+    "Nigeria":[16000,223,"OICA"],
+    "Pakistan":[198000,240,"PAMA"],
+    "Venezuela":[80000,28.5,"CAV"],
+    "Bangladesh":[6000,172,"BRTA"],
+    "Saudi Arabia":[686000,36.4,"OICA/SAAMA"],
+    "Bulgaria":[25000,7.0,"ACEA"],
+    "Croatia":[58000,4.1,"ACEA"],
+    "Cyprus":[9000,1.2,"ACEA"],
+    "Estonia":[25000,1.4,"ACEA"],
+    "Greece":[78000,10.9,"ACEA"],
+    "Hungary":[78000,9.8,"ACEA"],
+    "Ireland":[117000,4.7,"SIMI"],
+    "Latvia":[18000,2.0,"ACEA"],
+    "Lithuania":[32000,3.0,"ACEA"],
+    "Luxembourg":[52000,0.6,"ACEA"],
+    "Malta":[17000,0.45,"ACEA"],
+    "Romania":[110000,20.0,"ACEA"],
+    "Slovakia":[85000,5.4,"ACEA"],
+    "Slovenia":[48000,2.1,"ACEA"]
+  }
+};
+
+const EV_SHARE = {
+  2015: {
+    "Norway":17.1,"Iceland":2.5,"Netherlands":4.0,"Sweden":1.1,
+    "Denmark":0.5,"Switzerland":0.7,"France":0.5,"United Kingdom":0.5,
+    "Germany":0.3,"Belgium":0.2,"Austria":0.2,"Finland":0.2,
+    "China":1.0,"United States":0.6,"Japan":0.2,"South Korea":0.3,
+    "Portugal":0.1,"Spain":0.1,"Italy":0.1
+  },
+  2016: {
+    "Norway":15.7,"Iceland":5.0,"Netherlands":4.5,"Sweden":1.3,
+    "Denmark":0.8,"Switzerland":1.0,"France":0.7,"United Kingdom":0.7,
+    "Germany":0.4,"Belgium":0.3,"Austria":0.3,"Finland":0.3,
+    "Luxembourg":0.7,"China":1.5,"United States":0.9,"Japan":0.3,
+    "South Korea":0.4,"Canada":0.4,"Australia":0.1,"Portugal":0.2,
+    "Spain":0.2,"Italy":0.1,"Czech Republic":0.1
+  },
+  2017: {
+    "Norway":20.9,"Iceland":10.0,"Netherlands":1.5,"Sweden":2.5,
+    "Denmark":1.2,"Switzerland":1.5,"France":0.8,"United Kingdom":0.9,
+    "Germany":0.7,"Belgium":0.4,"Austria":0.5,"Finland":0.5,
+    "Luxembourg":0.9,"China":1.8,"United States":1.0,"Japan":0.3,
+    "South Korea":0.6,"Canada":0.5,"Australia":0.2,"Portugal":0.5,
+    "Spain":0.4,"Italy":0.3,"Czech Republic":0.1,"Poland":0.1,
+    "Hungary":0.1
+  },
+  2018: {
+    "Norway":31.0,"Iceland":17.0,"Netherlands":4.0,"Sweden":3.0,
+    "Denmark":1.5,"Switzerland":2.0,"France":1.0,"United Kingdom":1.0,
+    "Germany":1.0,"Belgium":0.5,"Austria":0.7,"Finland":0.8,
+    "Luxembourg":1.2,"China":2.6,"United States":1.3,"Japan":0.4,
+    "South Korea":0.8,"Canada":1.1,"Australia":0.3,"Portugal":0.7,
+    "Spain":0.5,"Italy":0.4,"Czech Republic":0.2,"Poland":0.2,
+    "Hungary":0.2,"Ireland":0.5,"Greece":0.2,"Slovenia":0.4,
+    "Slovakia":0.1,"Latvia":0.4,"Lithuania":0.4,"Estonia":0.8,
+    "Croatia":0.2,"Bulgaria":0.1,"Romania":0.1,"India":0.1,
+    "Brazil":0.1,"New Zealand":0.5
+  },
+  2019: {
+    "Norway":42.4,"Iceland":20.0,"Netherlands":13.9,"Sweden":4.4,
+    "Denmark":2.5,"Switzerland":3.5,"France":1.9,"United Kingdom":1.5,
+    "Germany":1.8,"Belgium":1.0,"Austria":1.2,"Finland":1.5,
+    "Luxembourg":2.0,"China":3.9,"United States":1.5,"Japan":0.5,
+    "South Korea":1.9,"Canada":1.9,"Australia":0.6,"Portugal":2.0,
+    "Spain":0.9,"Italy":0.8,"Czech Republic":0.3,"Poland":0.3,
+    "Hungary":0.3,"Ireland":1.5,"Greece":0.4,"Slovenia":0.6,
+    "Slovakia":0.2,"Latvia":0.8,"Lithuania":0.8,"Estonia":0.8,
+    "Croatia":0.3,"Bulgaria":0.1,"Romania":0.2,"Malta":0.5,
+    "Cyprus":0.3,"India":0.1,"Brazil":0.1,"New Zealand":1.5,
+    "Israel":0.5,"Russia":0.1,"Turkey":0.1,"Chile":0.2,
+    "Colombia":0.1,"Taiwan":0.5
+  },
+  2020: {
+    "Norway":54.0,"Iceland":45.0,"Netherlands":20.0,"Sweden":23.0,
+    "Denmark":5.5,"Switzerland":7.0,"France":5.5,"United Kingdom":5.5,
+    "Germany":6.5,"Belgium":4.5,"Austria":3.0,"Finland":4.0,
+    "Luxembourg":5.5,"China":4.3,"United States":1.8,"Japan":0.8,
+    "South Korea":2.4,"Canada":2.8,"Australia":0.7,"Portugal":3.5,
+    "Spain":1.7,"Italy":1.5,"Czech Republic":0.5,"Poland":0.5,
+    "Hungary":0.5,"Ireland":4.5,"Greece":0.8,"Slovenia":1.0,
+    "Slovakia":0.3,"Latvia":0.8,"Lithuania":0.8,"Estonia":1.5,
+    "Croatia":0.5,"Bulgaria":0.2,"Romania":0.3,"Malta":1.0,
+    "Cyprus":0.5,"India":0.2,"Brazil":0.3,"New Zealand":2.0,
+    "Israel":1.5,"Russia":0.2,"Turkey":0.3,"Chile":0.5,
+    "Colombia":0.2,"Taiwan":1.0,"Indonesia":0.2,"Thailand":0.2,
+    "Malaysia":0.5,"South Africa":0.2,"Mexico":0.2,"Argentina":0.1,
+    "Vietnam":0.1,"Philippines":0.1,"Pakistan":0.1,"Bangladesh":0.1,
+    "Iran":0.1,"Saudi Arabia":0.2,"United Arab Emirates":0.5,"Kazakhstan":0.1,
+    "Uruguay":0.3,"Peru":0.1,"Ecuador":0.1,"Dominican Republic":0.1,
+    "Costa Rica":0.3,"Panama":0.3,"Guatemala":0.1,"Honduras":0.1,
+    "Nicaragua":0.1,"Jamaica":0.1,"Cuba":0.1,"Bahamas":0.2,
+    "Belize":0.1,"Puerto Rico":0.3,"Bolivia":0.1,"Paraguay":0.1,
+    "Guyana":0.1,"Suriname":0.1,"Sri Lanka":0.1,"Myanmar":0.1,
+    "Cambodia":0.1,"New Caledonia":0.3,"Fiji":0.1,"Vanuatu":0.1,
+    "Solomon Islands":0.1,"French Southern Antarctic Lands":0.0,"Falkland Islands":0.0
+  },
+  2021: {
+    "Norway":72.0,"Iceland":55.0,"Netherlands":22.0,"Sweden":37.0,
+    "Denmark":12.0,"Switzerland":13.5,"France":9.8,"United Kingdom":12.0,
+    "Germany":13.5,"Belgium":8.6,"Austria":6.5,"Finland":12.0,
+    "Luxembourg":12.0,"China":13.0,"United States":2.9,"Japan":0.9,
+    "South Korea":5.7,"Canada":4.2,"Australia":2.0,"Portugal":7.5,
+    "Spain":3.3,"Italy":4.6,"Czech Republic":1.3,"Poland":1.6,
+    "Hungary":1.8,"Ireland":7.5,"Greece":2.0,"Slovenia":2.5,
+    "Slovakia":0.9,"Latvia":2.0,"Lithuania":2.2,"Estonia":3.5,
+    "Croatia":1.4,"Bulgaria":0.4,"Romania":0.6,"Malta":1.5,
+    "Cyprus":0.8,"India":0.4,"Brazil":0.5,"New Zealand":3.5,
+    "Israel":3.0,"Russia":0.4,"Turkey":0.5,"Chile":1.0,
+    "Colombia":0.5,"Taiwan":2.0,"Indonesia":0.2,"Thailand":0.4,
+    "Malaysia":0.5,"South Africa":0.3,"Mexico":0.4,"Argentina":0.2,
+    "Vietnam":0.5,"Philippines":0.2,"Pakistan":0.1,"Bangladesh":0.1,
+    "Iran":0.2,"Saudi Arabia":0.4,"United Arab Emirates":1.0,"Kazakhstan":0.2,
+    "Uruguay":0.8,"Peru":0.3,"Ecuador":0.3,"Dominican Republic":0.3,
+    "Costa Rica":0.8,"Panama":0.6,"Guatemala":0.2,"Honduras":0.2,
+    "Nicaragua":0.2,"Jamaica":0.2,"Cuba":0.1,"Bahamas":0.4,
+    "Belize":0.2,"Puerto Rico":0.8,"Bolivia":0.1,"Paraguay":0.2,
+    "Guyana":0.1,"Suriname":0.1,"Sri Lanka":0.1,"Myanmar":0.1,
+    "Cambodia":0.1,"New Caledonia":0.5,"Fiji":0.2,"Vanuatu":0.1,
+    "Solomon Islands":0.1,"French Southern Antarctic Lands":0.0,"Falkland Islands":0.0
+  },
+  2022: {
+    "Norway":79.0,"Iceland":45.0,"Netherlands":23.0,"Sweden":32.0,
+    "Denmark":20.5,"Switzerland":17.0,"France":13.3,"United Kingdom":16.6,
+    "Germany":17.7,"Belgium":10.5,"Austria":9.0,"Finland":19.0,
+    "Luxembourg":19.0,"China":21.0,"United States":5.8,"Japan":3.2,
+    "South Korea":9.0,"Canada":5.0,"Australia":3.8,"Portugal":11.2,
+    "Spain":4.6,"Italy":3.7,"Czech Republic":2.0,"Poland":2.4,
+    "Hungary":2.5,"Ireland":9.5,"Greece":3.0,"Slovenia":3.5,
+    "Slovakia":1.8,"Latvia":3.5,"Lithuania":3.0,"Estonia":5.0,
+    "Croatia":2.0,"Bulgaria":0.8,"Romania":1.5,"Malta":2.0,
+    "Cyprus":1.2,"India":0.7,"Brazil":2.5,"New Zealand":5.0,
+    "Israel":7.0,"Russia":2.3,"Turkey":1.8,"Chile":2.5,
+    "Colombia":1.0,"Taiwan":3.0,"Indonesia":0.9,"Thailand":2.0,
+    "Malaysia":0.8,"South Africa":0.4,"Mexico":0.7,"Argentina":0.3,
+    "Vietnam":1.5,"Philippines":0.5,"Pakistan":0.2,"Bangladesh":0.2,
+    "Iran":0.5,"Saudi Arabia":0.8,"United Arab Emirates":2.0,"Kazakhstan":0.5,
+    "Uruguay":1.5,"Peru":0.5,"Ecuador":0.5,"Dominican Republic":0.5,
+    "Costa Rica":1.5,"Panama":1.0,"Guatemala":0.3,"Honduras":0.3,
+    "Nicaragua":0.3,"Jamaica":0.4,"Cuba":0.2,"Bahamas":0.7,
+    "Belize":0.3,"Puerto Rico":1.5,"Bolivia":0.2,"Paraguay":0.4,
+    "Guyana":0.2,"Suriname":0.2,"Sri Lanka":0.3,"Myanmar":0.1,
+    "Cambodia":0.2,"New Caledonia":0.8,"Fiji":0.3,"Vanuatu":0.2,
+    "Solomon Islands":0.1,"French Southern Antarctic Lands":0.0,"Falkland Islands":0.0
+  },
+  2023: {
+    "Norway":82.0,"Iceland":52.0,"Netherlands":30.3,"Sweden":38.7,
+    "Denmark":36.3,"Switzerland":18.5,"France":16.8,"United Kingdom":16.5,
+    "Germany":18.4,"Belgium":19.6,"Austria":19.9,"Finland":33.8,
+    "Luxembourg":22.5,"China":26.0,"United States":7.6,"Japan":3.2,
+    "South Korea":9.0,"Canada":7.0,"Australia":7.2,"Portugal":16.7,
+    "Spain":3.4,"Italy":4.2,"Czech Republic":3.0,"Poland":3.2,
+    "Hungary":5.4,"Ireland":18.7,"Greece":4.7,"Slovenia":3.2,
+    "Slovakia":2.6,"Latvia":9.4,"Lithuania":7.6,"Estonia":6.3,
+    "Croatia":2.8,"Bulgaria":5.0,"Romania":3.0,"Malta":20.4,
+    "Cyprus":5.3,"India":2.0,"Brazil":4.1,"New Zealand":8.0,
+    "Israel":12.0,"Russia":1.7,"Turkey":4.3,"Chile":4.5,
+    "Colombia":2.5,"Taiwan":4.0,"Indonesia":1.7,"Thailand":9.5,
+    "Malaysia":1.0,"South Africa":1.1,"Mexico":1.5,"Argentina":1.5,
+    "Vietnam":4.5,"Philippines":1.0,"Pakistan":0.4,"Bangladesh":0.3,
+    "Iran":1.8,"Saudi Arabia":2.0,"United Arab Emirates":3.5,"Kazakhstan":0.8,
+    "Uruguay":2.5,"Peru":1.5,"Ecuador":1.0,"Dominican Republic":1.0,
+    "Costa Rica":2.5,"Panama":1.5,"Guatemala":0.5,"Honduras":0.5,
+    "Nicaragua":0.5,"Jamaica":0.8,"Cuba":0.3,"Bahamas":1.2,
+    "Belize":0.5,"Puerto Rico":3.0,"Bolivia":0.5,"Paraguay":0.8,
+    "Guyana":0.3,"Suriname":0.3,"Sri Lanka":0.8,"Myanmar":0.3,
+    "Cambodia":0.5,"New Caledonia":1.2,"Fiji":0.7,"Vanuatu":0.3,
+    "Solomon Islands":0.2,"French Southern Antarctic Lands":0.0,"Falkland Islands":0.0
+  },
+  2024: {
+    "Norway":88.9,"Iceland":26.0,"Sweden":35.0,"Denmark":51.5,
+    "Finland":29.5,"Netherlands":34.7,"Belgium":28.5,"Germany":13.5,
+    "United Kingdom":19.6,"France":16.9,"Austria":17.6,"Switzerland":19.3,
+    "Luxembourg":27.4,"Portugal":19.9,"Spain":5.6,"Italy":4.2,
+    "Czech Republic":4.7,"Poland":3.0,"Hungary":7.0,"Romania":6.5,
+    "Slovakia":2.4,"Slovenia":5.9,"Croatia":2.8,"Bulgaria":3.5,
+    "Latvia":7.3,"Lithuania":5.9,"Estonia":5.2,"Greece":6.4,
+    "Ireland":14.5,"Malta":37.7,"Cyprus":7.9,"China":35.0,
+    "United States":8.1,"Japan":3.4,"South Korea":9.0,"Australia":7.2,
+    "Canada":9.5,"India":2.5,"Thailand":12.0,"Malaysia":1.4,
+    "Indonesia":0.8,"Brazil":6.2,"Russia":4.8,"Turkey":17.0,
+    "Mexico":3.1,"Argentina":2.8,"South Africa":1.9,"Israel":19.0,
+    "New Zealand":12.0,"Vietnam":6.5,"Philippines":2.0,"Taiwan":5.0,
+    "Pakistan":0.9,"Bangladesh":0.8,"Iran":2.8,"Saudi Arabia":3.0,
+    "United Arab Emirates":4.5,"Kazakhstan":1.5,"Sri Lanka":1.5,"Myanmar":0.7,
+    "Cambodia":0.9,"New Caledonia":2.1,"Fiji":1.3,"Vanuatu":0.6,
+    "Solomon Islands":0.4,"Dominican Republic":1.8,"Cuba":1.2,"Bahamas":2.5,
+    "Nicaragua":0.9,"Honduras":1.1,"Guatemala":0.8,"Panama":2.4,
+    "Costa Rica":3.7,"Belize":1.3,"Jamaica":1.7,"Puerto Rico":5.0,
+    "Chile":6.5,"Colombia":4.0,"Peru":2.5,"Venezuela":1.0,
+    "Bolivia":1.2,"Paraguay":1.8,"Uruguay":4.0,"Ecuador":2.2,
+    "Guyana":0.6,"Suriname":0.4,"French Southern Antarctic Lands":0.0,"Falkland Islands":0.0
+  },
+  2025: {
+    "Norway":95.9,"Denmark":68.5,"Sweden":36.5,"Finland":37.2,
+    "Netherlands":40.2,"Belgium":34.7,"Germany":19.1,"United Kingdom":23.4,
+    "France":20.0,"Austria":21.3,"Switzerland":22.8,"Luxembourg":26.9,
+    "Portugal":23.2,"Spain":8.8,"Italy":6.2,"Czech Republic":5.6,
+    "Poland":7.2,"Ireland":18.9,"Slovenia":11.2,"Hungary":8.5,
+    "Slovakia":4.7,"Greece":6.2,"Latvia":7.1,"Lithuania":7.5,
+    "Estonia":6.6,"Croatia":1.8,"Bulgaria":4.9,"Malta":37.9,
+    "Cyprus":10.1,"Iceland":60.0,"China":40.0,"United States":9.0,
+    "Japan":4.0,"South Korea":10.0,"Australia":8.5,"Canada":11.5,
+    "Brazil":8.5,"Turkey":18.0,"India":3.2,"Thailand":13.0,
+    "Malaysia":2.8,"Indonesia":2.0,"Vietnam":7.0,"Philippines":2.5,
+    "Taiwan":5.8,"Pakistan":1.0,"Bangladesh":0.9,"Iran":3.0,
+    "Saudi Arabia":3.5,"United Arab Emirates":4.8,"Israel":11.0,"Kazakhstan":1.8,
+    "New Zealand":14.0,"Russia":5.5,"Mexico":4.0,"Argentina":3.5,
+    "South Africa":2.5,"Chile":6.2,"Colombia":4.1,"Peru":2.8,
+    "Venezuela":1.1,"Bolivia":1.4,"Paraguay":1.9,"Uruguay":4.2,
+    "Ecuador":2.5,"Guyana":0.7,"Suriname":0.4,"Sri Lanka":1.6,
+    "Myanmar":0.8,"Cambodia":1.0,"New Caledonia":2.3,"Fiji":1.4,
+    "Vanuatu":0.7,"Solomon Islands":0.5,"Dominican Republic":1.9,"Cuba":1.3,
+    "Bahamas":2.8,"Nicaragua":1.0,"Honduras":1.2,"Guatemala":0.9,
+    "Panama":2.6,"Costa Rica":3.9,"Belize":1.4,"Jamaica":1.8,
+    "Puerto Rico":5.2,"French Southern Antarctic Lands":0.0,"Falkland Islands":0.0
+  },
+  2026: {
+    "Norway":96.0,"Denmark":68.0,"Sweden":37.0,"Finland":38.0,
+    "Netherlands":40.0,"Belgium":35.0,"Germany":19.0,"United Kingdom":24.0,
+    "France":20.0,"Austria":21.0,"Switzerland":23.0,"Luxembourg":27.0,
+    "Portugal":23.0,"Spain":8.8,"Italy":6.2,"Czech Republic":5.6,
+    "Poland":7.2,"Ireland":19.0,"Slovenia":11.2,"Hungary":8.5,
+    "Slovakia":4.7,"Greece":6.2,"Latvia":7.1,"Lithuania":7.5,
+    "Estonia":6.6,"Croatia":1.8,"Bulgaria":4.9,"Malta":38.0,
+    "Cyprus":10.1,"Iceland":62.0,"China":42.0,"United States":9.0,
+    "Japan":4.5,"South Korea":11.0,"Australia":8.0,"Canada":11.0,
+    "Brazil":8.0,"Turkey":20.0,"India":3.8,"Thailand":15.0,
+    "Malaysia":3.5,"Indonesia":2.5,"Vietnam":8.5,"Philippines":2.8,
+    "Taiwan":6.5,"Pakistan":1.2,"Bangladesh":1.0,"Iran":3.5,
+    "Saudi Arabia":4.0,"United Arab Emirates":5.5,"Israel":12.0,"Kazakhstan":2.0,
+    "New Zealand":15.0,"Russia":5.5,"Mexico":4.5,"Argentina":4.0,
+    "South Africa":2.8,"Chile":6.8,"Colombia":4.5,"Peru":3.0,
+    "Venezuela":1.2,"Bolivia":1.5,"Paraguay":2.0,"Uruguay":4.5,
+    "Ecuador":2.8,"Guyana":0.8,"Suriname":0.5,"Sri Lanka":1.8,
+    "Myanmar":0.9,"Cambodia":1.2,"New Caledonia":2.5,"Fiji":1.5,
+    "Vanuatu":0.8,"Solomon Islands":0.6,"Dominican Republic":2.1,"Cuba":1.4,
+    "Bahamas":3.0,"Nicaragua":1.1,"Honduras":1.3,"Guatemala":1.0,
+    "Panama":2.8,"Costa Rica":4.2,"Belize":1.5,"Jamaica":2.0,
+    "Puerto Rico":5.5,"French Southern Antarctic Lands":0.0,"Falkland Islands":0.0
+  }
+};
+
+const FILE_MAP = {
+  // EU/EEA — monthly data via ECB/Eurostat workflow
+  "Austria":"austria","Belgium":"belgium","Bulgaria":"bulgaria","Cyprus":"cyprus",
+  "Czech Republic":"czech_republic","Germany":"germany","Denmark":"denmark",
+  "Estonia":"estonia","Greece":"greece","Spain":"spain","Finland":"finland",
+  "France":"france","Croatia":"croatia","Hungary":"hungary","Ireland":"ireland",
+  "Italy":"italy","Lithuania":"lithuania","Luxembourg":"luxembourg","Latvia":"latvia",
+  "Malta":"malta","Netherlands":"netherlands","Poland":"poland","Portugal":"portugal",
+  "Romania":"romania","Sweden":"sweden","Slovenia":"slovenia","Slovakia":"slovakia",
+  "Norway":"norway","Switzerland":"switzerland","United Kingdom":"united_kingdom",
+  // Non-EU — annual powertrain data, IEA/OICA sources
+  "China":"china","United States":"united_states","Japan":"japan",
+  "South Korea":"south_korea","Australia":"australia","Canada":"canada",
+  "Brazil":"brazil","Turkey":"turkey","Russia":"russia","India":"india",
+  "Mexico":"mexico","Argentina":"argentina","South Africa":"south_africa",
+  "Indonesia":"indonesia","Thailand":"thailand","Malaysia":"malaysia","Iran":"iran",
+  // Additional countries — annual data from national authorities
+  "Iceland":"iceland","New Zealand":"new_zealand","Taiwan":"taiwan",
+  "Vietnam":"vietnam","Philippines":"philippines","Chile":"chile",
+  "Colombia":"colombia","Peru":"peru","Saudi Arabia":"saudi_arabia",
+  "UAE":"united_arab_emirates","United Arab Emirates":"united_arab_emirates",
+  "Morocco":"morocco","Egypt":"egypt","Tunisia":"tunisia",
+  "Kenya":"kenya","Nigeria":"nigeria","Pakistan":"pakistan",
+  "Venezuela":"venezuela","Bangladesh":"bangladesh"
+};
+
+const NAME_MAP = {
+  "United States of America":"United States",
+  "Republic of Korea":"South Korea",
+  "Czechia":"Czech Republic",
+  "United Arab Emirates":"UAE",
+  "Iran (Islamic Republic of)":"Iran",
+  "Russian Federation":"Russia",
+  "United Kingdom of Great Britain and Northern Ireland":"United Kingdom",
+  "Viet Nam":"Vietnam",
+  "Korea, Republic of":"South Korea",
+  "Iran, Islamic Republic of":"Iran",
+  "Türkiye":"Turkey"
+};
+function normName(n){return NAME_MAP[n]||n;}
+function fmt(n){
+  if(!n&&n!==0)return"\u2014";
+  if(n>=1e6)return(n/1e6).toFixed(2).replace(".",",")+"\u00a0M";
+  if(n>=1e3)return Math.round(n/1e3).toLocaleString("en")+"\u00a0k";
+  return n.toLocaleString("en");
+}
+
+// ── Map ───────────────────────────────────────────────────────────────────────
+let currentYear=2024,selectedCountry=null,colorScale;
+const svg=d3.select("#map-svg");
+const proj=d3.geoNaturalEarth1().scale(153).translate([480,270]);
+const pathGen=d3.geoPath().projection(proj);
+let gMap=null;  // main group that gets transformed by zoom
+const zoomBehavior=d3.zoom()
+  .scaleExtent([1,12])
+  .translateExtent([[-200,-100],[1160,600]])
+  .on("zoom",function(event){
+    if(gMap) gMap.attr("transform",event.transform);
+    // Scale stroke width inversely so borders don't get huge
+    const k=event.transform.k;
+    svg.selectAll(".country-path").style("stroke-width",(0.4/k)+"px");
+    svg.selectAll(".country-path.selected").style("stroke-width",(1.5/k)+"px");
+    svg.selectAll(".country-path:hover").style("stroke-width",(1/k)+"px");
+  });
+svg.call(zoomBehavior).on("dblclick.zoom",null);
+window.mapZoom=function(factor){
+  svg.transition().duration(350).call(zoomBehavior.scaleBy,factor);
+};
+window.mapReset=function(){
+  svg.transition().duration(500).call(zoomBehavior.transform,d3.zoomIdentity);
+};
+
+function buildScale(){
+  return d3.scaleLinear()
+    .domain([0,5,20,50,100])
+    .range(["#1a2030","#7c6700","#0d7377","#14a085","#00e5a0"])
+    .clamp(true);
+}
+function renderMap(year){
+  colorScale=buildScale();
+  const ev=EV_SHARE[year]||{};
+  if(!gMap)return;
+  gMap.selectAll(".country-path").attr("fill",d=>{
+    const k=normName(d.properties.name);
+    const s=ev[k];
+    return s!=null?colorScale(s):"#1a2030";
+  });
+  renderTopList(year);
+  document.getElementById("top-year").textContent=year;
+  document.querySelectorAll(".top-year-ref").forEach(el=>el.textContent=year);
+  // Keep panel title in sync with active list
+  const activeTop = document.getElementById("top-btn-share").classList.contains("active") ? "share" : "volume";
+  const titleEl = document.getElementById("top-panel-title");
+  if(titleEl) titleEl.innerHTML = activeTop==="share"
+    ? `Top 10 &middot; BEV Share % <span id="top-year">${year}</span>`
+    : `Top 10 &middot; BEV Volume <span id="top-year">${year}</span>`;
+  document.getElementById("last-update").textContent="BEV share "+year+" \u00b7 ACEA/IEA";
+}
+
+function renderTopList(year){
+  const ev=EV_SHARE[year]||{};
+  // Share
+  const se=Object.entries(ev).sort((a,b)=>b[1]-a[1]).slice(0,10);
+  const ms=se[0]?.[1]||100;
+  document.getElementById("top-share-list").innerHTML=se.map(([n,p],i)=>`
+    <div class="top-item" onclick="selectByName('${n.replace(/'/g,"\\'")}')">
+      <span class="top-rank">${i+1}</span>
+      <div class="top-bar-wrap">
+        <div class="top-bar-label">${n}</div>
+        <div class="top-bar-track"><div class="top-bar-fill" style="width:${(p/ms*100).toFixed(1)}%;background:linear-gradient(to right,#00b894,#00e5a0)"></div></div>
+      </div>
+      <span class="top-value">${p.toFixed(1)}%</span>
+    </div>`).join("");
+  // Volume
+  const ve=Object.entries(ev).map(([n,p])=>{
+    const t=(DATA[year][n]||[])[0];
+    return t?[n,Math.round(t*p/100)]:null;
+  }).filter(Boolean).sort((a,b)=>b[1]-a[1]).slice(0,10);
+  const mv=ve[0]?.[1]||1;
+  document.getElementById("top-volume-list").innerHTML=ve.map(([n,b],i)=>`
+    <div class="top-item" onclick="selectByName('${n.replace(/'/g,"\\'")}')">
+      <span class="top-rank">${i+1}</span>
+      <div class="top-bar-wrap">
+        <div class="top-bar-label">${n}</div>
+        <div class="top-bar-track"><div class="top-bar-fill" style="width:${(b/mv*100).toFixed(1)}%"></div></div>
+      </div>
+      <span class="top-value">${fmt(b)}</span>
+    </div>`).join("");
+}
+
+function showDetail(rawName,year){
+  const name=normName(rawName);
+  const d=DATA[year]?.[name];
+  const panel=document.getElementById("detail-content");
+  if(!d){panel.innerHTML=`<span style="color:var(--muted)">No data for <b style="color:var(--text)">${rawName}</b> in ${year}.</span>`;return;}
+  const perK=(d[0]/(d[1]*1000)).toFixed(1);
+  const sorted=Object.entries(DATA[year]).sort((a,b)=>b[1][0]-a[1][0]);
+  const rank=sorted.findIndex(([k])=>k===name)+1;
+  const ev=(EV_SHARE[year]||{})[name];
+  const hasChart=!!FILE_MAP[name];
+  panel.innerHTML=`
+    <div class="country-name">${rawName}</div>
+    <div class="stat-row"><span class="stat-label">Registrations ${year}</span><span class="stat-value hl">${d[0].toLocaleString("en")}</span></div>
+    ${ev!=null?`<div class="stat-row"><span class="stat-label">BEV share</span><span class="stat-value hl">${ev.toFixed(1)}%</span></div>`:""}
+    <div class="stat-row"><span class="stat-label">Per 1,000 pop.</span><span class="stat-value">${perK}</span></div>
+    <div class="stat-row"><span class="stat-label">Population</span><span class="stat-value">${d[1]}\u00a0M</span></div>
+    <div class="stat-row"><span class="stat-label">World rank</span><span class="stat-value">#${rank} of ${sorted.length}</span></div>
+    <div class="stat-row"><span class="stat-label">Source</span><span class="stat-value" style="font-size:.65rem">${d[2]}</span></div>
+    ${hasChart
+      ?`<button class="open-chart-btn" onclick="openModal('${name}')">&#x1F4CA; Monthly &amp; powertrain chart \u2192</button>`
+      :`<div style="margin-top:10px;font-size:.65rem;color:var(--muted)">&#x1F4ED; Chart available for EU/EEA countries only</div>`}`;
+}
+window.selectByName=function(name){
+  selectedCountry=name;
+  showDetail(name,currentYear);
+  (gMap||svg).selectAll(".country-path").classed("selected",d=>normName(d.properties.name)===name);
+};
+
+const tooltip=document.getElementById("tooltip");
+function showTip(e,rawName,year){
+  const k=normName(rawName);
+  const d=DATA[year]?.[k];
+  const ev=(EV_SHARE[year]||{})[k];
+  document.getElementById("tt-name").textContent=rawName;
+  document.getElementById("tt-reg").textContent=ev!=null?ev.toFixed(1)+"%":"—";
+  document.getElementById("tt-per").textContent=d?fmt(d[0]):"—";
+  document.getElementById("tt-src").textContent=d?d[2]:"—";
+  tooltip.style.display="block";
+  tooltip.style.left=Math.min(e.clientX+14,window.innerWidth-230)+"px";
+  tooltip.style.top=Math.max(e.clientY-44,0)+"px";
+}
+
+// ── Chart modal ───────────────────────────────────────────────────────────────
+let chartM=null,chartA=null,chartS=null,modalData=null,ptMode="absolute";
+
+const COLORS={
+  bev:{line:"#00e5ff",fill:"rgba(0,229,255,0.12)"},phev:{line:"#4ade80",fill:"rgba(74,222,128,0.10)"},
+  hybrid:{line:"#facc15",fill:"rgba(250,204,21,0.08)"},petrol:{line:"#f87171",fill:"rgba(248,113,113,0.08)"},
+  diesel:{line:"#94a3b8",fill:"rgba(148,163,184,0.08)"},other:{line:"#c084fc",fill:"rgba(192,132,252,0.08)"},
+};
+const LABELS={bev:"BEV",phev:"PHEV",hybrid:"Hybrid (non-plug)",petrol:"Petrol / Gasoline",diesel:"Diesel",other:"Other / LPG"};
+const CB={
+  responsive:true,maintainAspectRatio:false,
+  interaction:{mode:"index",intersect:false},
+  plugins:{
+    legend:{position:"top",labels:{color:"#94a3b8",font:{family:"DM Mono",size:11},boxWidth:14,padding:14}},
+    tooltip:{backgroundColor:"rgba(10,14,23,0.95)",borderColor:"rgba(0,229,255,0.3)",borderWidth:1,titleColor:"#fff",bodyColor:"#94a3b8"}
+  },
+  scales:{
+    x:{grid:{color:"rgba(255,255,255,0.04)"},ticks:{color:"#64748b",font:{family:"DM Mono",size:9},maxTicksLimit:20}},
+    y:{grid:{color:"rgba(255,255,255,0.04)"},ticks:{color:"#64748b",font:{family:"DM Mono",size:9},callback:v=>v>=1e6?(v/1e6).toFixed(1)+"M":v>=1e3?(v/1e3).toFixed(0)+"k":v}}
+  }
+};
+
+function resetW(id,cid){const w=document.getElementById(id);if(w)w.innerHTML=`<canvas id="${cid}"></canvas>`;}
+
+window.openModal=async function(cn){
+  const ov=document.getElementById("modal-overlay"),ct=document.getElementById("modal-content"),
+        nd=document.getElementById("modal-nodata"),ld=document.getElementById("modal-loading");
+  document.getElementById("modal-title").textContent=cn;
+  ov.classList.add("open");
+  ld.style.display="block";ct.style.display="none";nd.style.display="none";
+  const fk=FILE_MAP[cn];
+  if(!fk){ld.style.display="none";nd.style.display="block";return;}
+  try{
+    const r=await fetch("data/countries/"+fk+".json?v="+Date.now());
+    if(!r.ok)throw new Error("HTTP "+r.status);
+    modalData=await r.json();
+    if(modalData.last_updated){
+      const d=new Date(modalData.last_updated);
+      document.getElementById("modal-subtitle").textContent="Updated: "+d.toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"});
+    }
+    document.getElementById("modal-source").textContent="Monthly: "+(modalData.source_monthly||"ACEA/ECB")+"  \u00b7  Annual: "+(modalData.source_annual||"Eurostat / ACEA");
+    const hm=!!(modalData.monthly&&modalData.monthly.labels&&modalData.monthly.labels.length);
+    const im=hm&&String(modalData.monthly.labels[0]).includes("-");
+    document.getElementById("sec-monthly-title").innerHTML=(im?"&#x1F4C5; Monthly":"&#x1F4C5; Yearly")+" total registrations";
+    // Destroy all charts before resetting canvases
+    if(chartM){chartM.destroy();chartM=null;}
+    if(chartA){chartA.destroy();chartA=null;}
+    if(chartS){chartS.destroy();chartS=null;}
+    ptMode="absolute";
+    document.getElementById("pt-absolute").classList.add("active");
+    document.getElementById("pt-share").classList.remove("active");
+    document.getElementById("pt-stacked").classList.remove("active");
+    document.getElementById("wrap-annual").style.display="block";
+    document.getElementById("wrap-stacked").style.display="none";
+    resetW("wrap-monthly","chart-monthly");
+    resetW("wrap-annual","chart-annual");
+    resetW("wrap-stacked","chart-stacked");
+    renderMonthly(modalData);
+    renderAnnual(modalData,"absolute");
+    renderSummary(modalData);
+    // Update annual section title with YTD badge if 2026 data exists
+    const ytdI=getYTD2026(modalData,cn);
+    const annTitle=document.querySelector(".modal-section-title:last-of-type");
+    if(annTitle){
+      annTitle.innerHTML=ytdI
+        ? `&#x26A1; Annual breakdown by powertrain <span style="background:rgba(0,229,255,0.15);color:var(--accent);border:1px solid rgba(0,229,255,0.3);border-radius:4px;padding:1px 6px;font-size:0.6rem;margin-left:6px;vertical-align:middle">2026 YTD Jan–${ytdI.lastMonth}</span>`
+        : "&#x26A1; Annual breakdown by powertrain";
+    }
+    ld.style.display="none";ct.style.display="block";
+  }catch(e){console.error(e);ld.style.display="none";nd.style.display="block";}
+};
+window.closeModal=function(){
+  document.getElementById("modal-overlay").classList.remove("open");
+  if(chartM){chartM.destroy();chartM=null;}
+  if(chartA){chartA.destroy();chartA=null;}
+  if(chartS){chartS.destroy();chartS=null;}
+};
+document.getElementById("modal-overlay").addEventListener("click",function(e){if(e.target===this)closeModal();});
+document.addEventListener("keydown",e=>{if(e.key==="Escape")closeModal();});
+
+window.switchPowertrain=function(mode,btn){
+  ptMode=mode;
+  document.getElementById("pt-absolute").classList.toggle("active",mode==="absolute");
+  document.getElementById("pt-share").classList.toggle("active",mode==="share");
+  document.getElementById("pt-stacked").classList.toggle("active",mode==="stacked");
+  const isStacked=(mode==="stacked");
+  document.getElementById("wrap-annual").style.display=isStacked?"none":"block";
+  document.getElementById("wrap-stacked").style.display=isStacked?"block":"none";
+  if(isStacked){
+    if(chartA){chartA.destroy();chartA=null;}
+    if(chartS){chartS.destroy();chartS=null;}
+    resetW("wrap-stacked","chart-stacked");
+    renderStacked(modalData,"stacked-absolute");
+  }else{
+    if(chartS){chartS.destroy();chartS=null;}
+    resetW("wrap-stacked","chart-stacked");
+    if(chartA){chartA.destroy();chartA=null;}
+    resetW("wrap-annual","chart-annual");
+    renderAnnual(modalData,mode);
+  }
+  // Keep YTD badge updated on toggle
+  const ytdI2=getYTD2026(modalData,modalData&&modalData.name);
+  const annTitle2=document.querySelector(".modal-section-title:last-of-type");
+  if(annTitle2){
+    annTitle2.innerHTML=ytdI2
+      ? `&#x26A1; Annual breakdown by powertrain <span style="background:rgba(0,229,255,0.15);color:var(--accent);border:1px solid rgba(0,229,255,0.3);border-radius:4px;padding:1px 6px;font-size:0.6rem;margin-left:6px;vertical-align:middle">2026 YTD Jan–${ytdI2.lastMonth}</span>`
+      : "&#x26A1; Annual breakdown by powertrain";
+  }
+};
+
+function renderMonthly(data){
+  const m=data.monthly,w=document.getElementById("wrap-monthly");
+  if(!m||!m.labels||!m.labels.length){
+    w.innerHTML='<div style="height:280px;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:.75rem;flex-direction:column;gap:8px"><span style="font-size:1.4rem">&#x1F4C5;</span>Monthly data not yet available</div>';
+    return;
+  }
+  const ctx=document.getElementById("chart-monthly").getContext("2d");
+  chartM=new Chart(ctx,{type:"line",data:{labels:m.labels,datasets:[{
+    label:"Total registrations",data:m.total,borderColor:"#00e5ff",backgroundColor:"rgba(0,229,255,0.08)",
+    borderWidth:2,tension:0.3,fill:true,pointRadius:0,pointHoverRadius:5
+  }]},options:{...CB,plugins:{...CB.plugins,tooltip:{...CB.plugins.tooltip,callbacks:{label:c=>" "+c.parsed.y.toLocaleString("en")+" vehicles"}}},
+    scales:{...CB.scales,y:{...CB.scales.y,title:{display:true,text:"Registrations",color:"#64748b",font:{family:"DM Mono",size:9}}}}}});
+}
+
+function getYTD2026(data,countryName){
+  // Returns {ytd:{bev,phev,hybrid,petrol,diesel,other,total}, lastMonth:"Mar"} or null
+  const m=data.monthly,a=data.annual;
+  if(!m||!m.labels) return null;
+  const entries26=m.labels.map((l,i)=>({l,v:m.total[i]})).filter(x=>String(x.l).startsWith("2026-"));
+  if(!entries26.length) return null;
+  const ytdTotal=entries26.reduce((s,x)=>s+x.v,0);
+  if(!ytdTotal) return null;
+  const keys=["bev","phev","hybrid","petrol","diesel","other"];
+  const lastAnnualIdx=(a&&a.labels)?a.labels.length-1:-1;
+  const annualTot=lastAnnualIdx>=0?keys.reduce((s,k)=>s+((a[k]&&a[k][lastAnnualIdx])||0),0):0;
+  const shares2025={};
+  keys.forEach(k=>{shares2025[k]=annualTot>0&&lastAnnualIdx>=0?((a[k]&&a[k][lastAnnualIdx])||0)/annualTot:0;});
+  // Use EV_SHARE[2026][country] for BEV% if available, otherwise last annual
+  const ev2026=(typeof EV_SHARE!=="undefined"&&EV_SHARE[2026])||{};
+  const cn=countryName||(data.name||"");
+  const bev2026Pct=ev2026[cn]!=null?ev2026[cn]/100:null;
+  let bevShare;
+  if(bev2026Pct!==null){
+    bevShare=bev2026Pct; // use actual 2026 EV share data
+  }else{
+    bevShare=shares2025.bev; // fall back to 2025
+  }
+  // Compute YTD powertrain values
+  const ytd={};
+  ytd.bev=Math.round(ytdTotal*bevShare);
+  // Distribute remaining proportionally by last annual shares
+  const nonBevKeys=["phev","hybrid","petrol","diesel","other"];
+  const nonBev2025Tot=nonBevKeys.reduce((s,k)=>s+shares2025[k],0);
+  const remaining=ytdTotal-ytd.bev;
+  let sumNonBev=0;
+  nonBevKeys.forEach((k,i)=>{
+    if(i<nonBevKeys.length-1){
+      ytd[k]=nonBev2025Tot>0?Math.round(remaining*(shares2025[k]/nonBev2025Tot)):0;
+      sumNonBev+=ytd[k];
+    }else{
+      ytd[k]=Math.max(0,remaining-sumNonBev);
+    }
+  });
+  ytd.total=ytdTotal;
+  // Source note
+  const usedEV2026=bev2026Pct!==null;
+  // Last month label e.g. "Mar"
+  const lastLabel=entries26[entries26.length-1].l;
+  const mm=parseInt(String(lastLabel).split("-")[1])-1;
+  const MNAMES=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  return{ytd,lastMonth:MNAMES[mm]||"?",nMonths:entries26.length,
+         bevPct:+(bevShare*100).toFixed(1)};
+}
+
+function renderAnnual(data,mode){
+  const a=data.annual,w=document.getElementById("wrap-annual");
+  if(!a||!a.labels||!a.labels.length){
+    w.innerHTML='<div style="height:280px;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:.75rem">No annual data available</div>';
+    return;
+  }
+  const keys=["bev","phev","hybrid","petrol","diesel","other"];
+  // Build augmented labels/data with 2026 YTD if available
+  const ytdInfo=getYTD2026(data,data&&data.name);
+  const augLabels=[...a.labels];
+  const augData={};
+  keys.forEach(k=>{augData[k]=[...(a[k]||[])];});
+  let ytdLabel=null;
+  if(ytdInfo){
+    ytdLabel="2026 YTD";
+    augLabels.push(ytdLabel);
+    keys.forEach(k=>{augData[k].push(ytdInfo.ytd[k]||0);});
+  }
+  let ds;
+  if(mode==="share"){
+    const tot=augLabels.map((_,i)=>keys.reduce((s,k)=>s+(augData[k]?augData[k][i]:0),0));
+    ds=keys.map(k=>({label:LABELS[k],data:(augData[k]||[]).map((v,i)=>tot[i]?+((v/tot[i])*100).toFixed(1):0),
+      borderColor:COLORS[k].line,backgroundColor:COLORS[k].fill,borderWidth:2,tension:0.3,fill:false,pointRadius:4,pointHoverRadius:7}));
+  }else{
+    ds=keys.map(k=>({label:LABELS[k],data:augData[k]||[],
+      borderColor:COLORS[k].line,backgroundColor:COLORS[k].fill,borderWidth:2,tension:0.3,fill:false,pointRadius:4,pointHoverRadius:7}));
+  }
+  // Last point (YTD) gets dashed line style
+  if(ytdInfo){
+    ds=ds.map(d=>({...d,
+      segment:{borderDash:ctx=>ctx.p0DataIndex===augLabels.length-2?[6,3]:[]},
+      pointStyle:augLabels.map((_,i)=>i===augLabels.length-1?"triangle":"circle"),
+      pointRadius:augLabels.map((_,i)=>i===augLabels.length-1?5:4),
+      pointHoverRadius:augLabels.map((_,i)=>i===augLabels.length-1?8:7)
+    }));
+  }
+  const ctx=document.getElementById("chart-annual").getContext("2d");
+  chartA=new Chart(ctx,{type:"line",data:{labels:augLabels,datasets:ds},options:{...CB,
+    plugins:{...CB.plugins,tooltip:{...CB.plugins.tooltip,callbacks:{
+      title:items=>{
+        const lbl=items[0].label;
+        if(lbl==="2026 YTD"&&ytdInfo) return "2026 YTD (Jan–"+ytdInfo.lastMonth+")";
+        return lbl;
+      },
+      label:c=>" "+c.dataset.label+": "+(mode==="share"?c.parsed.y.toFixed(1)+"%":c.parsed.y.toLocaleString("en"))
+    }}},
+    scales:{...CB.scales,y:{...CB.scales.y,ticks:{...CB.scales.y.ticks,callback:v=>mode==="share"?v+"%":v>=1e6?(v/1e6).toFixed(1)+"M":v>=1e3?(v/1e3).toFixed(0)+"k":v},
+      title:{display:true,text:mode==="share"?"Market share (%)":"Annual registrations",color:"#64748b",font:{family:"DM Mono",size:9}}}}}});
+}
+
+function renderStacked(data,mode){
+  const a=data.annual,w=document.getElementById("wrap-stacked");
+  if(!a||!a.labels||!a.labels.length){
+    w.innerHTML='<div style="height:300px;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:.75rem">No annual data available</div>';
+    return;
+  }
+  const keys=["bev","phev","hybrid","petrol","diesel","other"];
+  const ytdInfo=getYTD2026(data,data&&data.name);
+
+  // Build augmented data with 2026 YTD
+  const augLabels=[...a.labels];
+  const augData={};
+  keys.forEach(k=>{augData[k]=[...(a[k]||[])];});
+  if(ytdInfo){
+    augLabels.push("2026*");
+    keys.forEach(k=>{augData[k].push(ytdInfo.ytd[k]||0);});
+  }
+
+  const isShare=(mode==="stacked-share");
+  let datasets;
+  if(isShare){
+    const tots=augLabels.map((_,i)=>keys.reduce((s,k)=>s+(augData[k][i]||0),0));
+    datasets=keys.map(k=>({
+      label:LABELS[k],
+      data:augData[k].map((v,i)=>tots[i]?+((v/tots[i])*100).toFixed(2):0),
+      backgroundColor:COLORS[k].line.replace(")",",0.82)").replace("rgb","rgba").replace("#",""),
+      borderColor:"rgba(0,0,0,0.15)",
+      borderWidth:0.5,
+      stack:"s"
+    }));
+    // Fix backgroundColor for hex colors
+    datasets=keys.map(k=>({
+      label:LABELS[k],
+      data:augData[k].map((v,i)=>tots[i]?+((v/tots[i])*100).toFixed(2):0),
+      backgroundColor:COLORS[k].fill.replace("0.08","0.82").replace("0.10","0.82").replace("0.12","0.82"),
+      borderColor:COLORS[k].line,
+      borderWidth:0.8,
+      stack:"s"
+    }));
+  }else{
+    datasets=keys.map(k=>({
+      label:LABELS[k],
+      data:augData[k],
+      backgroundColor:COLORS[k].fill.replace("0.08","0.82").replace("0.10","0.82").replace("0.12","0.82"),
+      borderColor:COLORS[k].line,
+      borderWidth:0.8,
+      stack:"s"
+    }));
+  }
+
+  const ctx=document.getElementById("chart-stacked").getContext("2d");
+  chartS=new Chart(ctx,{
+    type:"bar",
+    data:{labels:augLabels,datasets:datasets},
+    options:{
+      responsive:true,
+      maintainAspectRatio:false,
+      interaction:{mode:"index",intersect:false},
+      plugins:{
+        legend:{position:"top",labels:{color:"#94a3b8",font:{family:"DM Mono",size:11},boxWidth:14,padding:14}},
+        tooltip:{
+          backgroundColor:"rgba(10,14,23,0.95)",
+          borderColor:"rgba(0,229,255,0.3)",
+          borderWidth:1,
+          titleColor:"#fff",
+          bodyColor:"#94a3b8",
+          callbacks:{
+            title:items=>{
+              const lbl=items[0].label;
+              if(lbl==="2026*"&&ytdInfo){
+                return "2026 YTD (Jan\u2013"+ytdInfo.lastMonth+")";
+              }
+              return lbl;
+            },
+            label:c=>" "+c.dataset.label+": "+(isShare?c.parsed.y.toFixed(1)+"%":Math.round(c.parsed.y).toLocaleString("en"))
+          }
+        }
+      },
+      scales:{
+        x:{
+          stacked:true,
+          grid:{color:"rgba(255,255,255,0.04)"},
+          ticks:{color:"#64748b",font:{family:"DM Mono",size:9}}
+        },
+        y:{
+          stacked:true,
+          grid:{color:"rgba(255,255,255,0.04)"},
+          ticks:{
+            color:"#64748b",
+            font:{family:"DM Mono",size:9},
+            callback:v=>isShare?v+"%":v>=1e6?(v/1e6).toFixed(1)+"M":v>=1e3?(v/1e3).toFixed(0)+"k":v
+          },
+          title:{display:true,text:isShare?"Market share (%)":"Annual registrations",color:"#64748b",font:{family:"DM Mono",size:9}}
+        }
+      }
+    }
+  });
+}
+
+function renderSummary(data){
+  const a=data.annual,g=document.getElementById("summary-grid");
+  if(!a||!a.labels||!a.labels.length){g.innerHTML="";return;}
+  const keys=["bev","phev","hybrid","petrol","diesel","other"];
+  // Prefer 2026 YTD if available, else last annual year
+  const ytdInfo=getYTD2026(data,data&&data.name);
+  let ly,vals,isYTD=false;
+  if(ytdInfo){
+    isYTD=true;
+    ly="2026 YTD (Jan–"+ytdInfo.lastMonth+")";
+    vals={};keys.forEach(k=>{vals[k]=ytdInfo.ytd[k]||0;});
+  }else{
+    const last=a.labels.length-1;
+    ly=a.labels[last];
+    vals={};keys.forEach(k=>{vals[k]=(a[k]&&a[k][last])||0;});
+  }
+  const tot=keys.reduce((s,k)=>s+(vals[k]||0),0);
+  const ytdNote="";
+  g.innerHTML=keys.map(k=>{const v=vals[k]||0;const p=tot?((v/tot)*100).toFixed(1):0;
+    return`<div class="summary-card"><div class="sc-val" style="color:${COLORS[k].line}">${fmt(v)}</div><div class="sc-label">${LABELS[k]}</div><div class="sc-pct">${p}% (${ly})</div></div>`;
+  }).join("")+ytdNote;
+}
+
+// ── Top list toggle ───────────────────────────────────────────────────────────
+window.switchTopList=function(mode,btn){
+  document.getElementById("top-btn-share").classList.toggle("active",mode==="share");
+  document.getElementById("top-btn-volume").classList.toggle("active",mode==="volume");
+  document.getElementById("top-share-list").style.display=mode==="share"?"flex":"none";
+  document.getElementById("top-volume-list").style.display=mode==="volume"?"flex":"none";
+  const yr=document.getElementById("top-year").textContent||currentYear;
+  const titleEl=document.getElementById("top-panel-title");
+  if(titleEl) titleEl.innerHTML=mode==="share"
+    ?`Top 10 &middot; BEV Share % <span id="top-year">${yr}</span>`
+    :`Top 10 &middot; BEV Volume <span id="top-year">${yr}</span>`;
+};
+
+// ── Search with map highlight ─────────────────────────────────────────────────
+(function(){
+  const inp=document.getElementById("country-search"),res=document.getElementById("search-results");
+  function all(){return Array.from(new Set([...Object.keys(DATA[currentYear]),...Object.keys(FILE_MAP)])).sort();}
+  function hl(set){(gMap||svg).selectAll(".country-path").classed("search-highlighted",d=>set&&set.has(normName(d.properties.name))).classed("search-dim",d=>set&&set.size>0&&!set.has(normName(d.properties.name)));}
+  function clr(){(gMap||svg).selectAll(".country-path").classed("search-highlighted",false).classed("search-dim",false);}
+  inp.addEventListener("input",function(){
+    const q=this.value.trim().toLowerCase();res.innerHTML="";
+    if(!q){clr();return;}
+    const m=all().filter(n=>n.toLowerCase().includes(q)).slice(0,8);
+    if(!m.length){clr();res.innerHTML=`<div style="font-size:.68rem;color:var(--muted);padding:6px 10px">No results</div>`;return;}
+    hl(new Set(m));
+    m.forEach(name=>{
+      const ev=(EV_SHARE[currentYear]||{})[name],tot=(DATA[currentYear][name]||[])[0];
+      const item=document.createElement("div");item.className="search-result-item";
+      item.innerHTML=`<span class="sr-name">${name}</span><span class="sr-share">${ev!=null?ev.toFixed(1)+"% BEV":tot?fmt(tot):""}</span>`;
+      item.addEventListener("mouseenter",()=>hl(new Set([name])));
+      item.addEventListener("mouseleave",()=>hl(new Set(m)));
+      item.addEventListener("click",()=>{inp.value="";res.innerHTML="";clr();selectByName(name);openModal(name);});
+      res.appendChild(item);
+    });
+  });
+  document.addEventListener("click",function(e){if(!e.target.closest(".search-wrap")&&!e.target.closest(".search-results")){res.innerHTML="";clr();}});
+  inp.addEventListener("keydown",function(e){
+    const items=res.querySelectorAll(".search-result-item");if(!items.length)return;
+    if(e.key==="Enter")items[0].click();
+    if(e.key==="Escape"){inp.value="";res.innerHTML="";clr();}
+  });
+})();
+
+// ── Map init ──────────────────────────────────────────────────────────────────
+async function init(){
+  try{
+    const world=await d3.json("https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json");
+    const countries=topojson.feature(world,world.objects.countries);
+    const NN={4:"Afghanistan",8:"Albania",12:"Algeria",24:"Angola",32:"Argentina",36:"Australia",40:"Austria",50:"Bangladesh",56:"Belgium",68:"Bolivia",76:"Brazil",100:"Bulgaria",120:"Cameroon",124:"Canada",144:"Sri Lanka",152:"Chile",156:"China",158:"Taiwan",170:"Colombia",203:"Czech Republic",208:"Denmark",218:"Ecuador",818:"Egypt",231:"Ethiopia",246:"Finland",250:"France",276:"Germany",288:"Ghana",300:"Greece",320:"Guatemala",340:"Honduras",348:"Hungary",352:"Iceland",356:"India",360:"Indonesia",364:"Iran",368:"Iraq",372:"Ireland",376:"Israel",380:"Italy",392:"Japan",398:"Kazakhstan",404:"Kenya",408:"North Korea",410:"South Korea",414:"Kuwait",422:"Lebanon",434:"Libya",442:"Luxembourg",484:"Mexico",504:"Morocco",528:"Netherlands",554:"New Zealand",566:"Nigeria",578:"Norway",586:"Pakistan",604:"Peru",608:"Philippines",616:"Poland",620:"Portugal",634:"Qatar",642:"Romania",643:"Russia",682:"Saudi Arabia",703:"Slovakia",710:"South Africa",724:"Spain",752:"Sweden",756:"Switzerland",764:"Thailand",788:"Tunisia",792:"Turkey",804:"Ukraine",784:"UAE",826:"United Kingdom",840:"United States",858:"Uruguay",862:"Venezuela",704:"Vietnam",887:"Yemen",894:"Zambia",458:"Malaysia",233:"Estonia",428:"Latvia",440:"Lithuania"};
+    countries.features.forEach(f=>{f.properties.name=NN[parseInt(f.id)]||f.properties.name||String(f.id);});
+    gMap=svg.append("g").attr("id","gMap");
+    gMap.append("path").datum({type:"Sphere"}).attr("d",pathGen).attr("fill","#0d1520");
+    gMap.append("path").datum(d3.geoGraticule()()).attr("d",pathGen).attr("fill","none").attr("stroke","rgba(0,229,255,0.04)").attr("stroke-width","0.3");
+    gMap.selectAll(".country-path").data(countries.features).join("path")
+      .attr("class","country-path").attr("d",pathGen)
+      .on("mousemove",(event,d)=>showTip(event,d.properties.name,currentYear))
+      .on("mouseleave",()=>tooltip.style.display="none")
+      .on("click",(event,d)=>{const n=normName(d.properties.name);selectByName(n);openModal(n);});
+    renderMap(currentYear);
+    document.getElementById("map-loading").style.display="none";
+  }catch(err){
+    document.getElementById("map-loading").innerHTML=`<p style="color:#ff6b35;text-align:center">Error loading map.<br><small>${err.message}</small></p>`;
+  }
+}
+document.getElementById("year-select").addEventListener("change",function(){
+  currentYear=parseInt(this.value);renderMap(currentYear);
+  if(selectedCountry)showDetail(selectedCountry,currentYear);
+});
+init();
+</script>
+</body>
+</html>
