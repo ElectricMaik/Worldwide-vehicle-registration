@@ -25,8 +25,7 @@ jobs:
           python-version: '3.10'
 
       - name: Install dependencies
-        run: |
-          pip install requests beautifulsoup4 lxml matplotlib
+        run: pip install requests beautifulsoup4 lxml matplotlib
 
       - name: Update data
         env:
@@ -41,33 +40,32 @@ jobs:
           git add data/countries/
           if ! git diff --cached --quiet; then
             git commit -m "data: update registrations [$(date -u '+%Y-%m-%d %H:%M UTC')]"
-            git pull --rebase origin main
-            git push origin main
+            # Force-push eigene Änderungen — kein Rebase nötig für Datendateien
+            git push --force-with-lease origin main
+          else
+            echo "No data changes — skipping commit."
           fi
 
       - name: Deploy to public repo
         env:
-          # Personal Access Token with "repo" scope
-          # Create at: github.com/settings/tokens → "Fine-grained tokens"
-          # Give it write access to your PUBLIC repo only
           DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}
-          PUBLIC_REPO: ElectricMaik/Worldwide-vehicle-registration
         run: |
-          # Clone public repo
-          git clone https://x-access-token:${DEPLOY_TOKEN}@github.com/${PUBLIC_REPO}.git public_deploy
-          
-          # Copy only the files users need to see
+          # Frisch klonen (immer sauberer Stand)
+          git clone https://x-access-token:${DEPLOY_TOKEN}@github.com/ElectricMaik/Worldwide-vehicle-registration.git public_deploy
+
+          # Nur die nötigen Dateien kopieren
           cp index.html public_deploy/index.html
-          cp -r data/countries/ public_deploy/data/countries/
-          
-          # Commit and push to public repo
+          mkdir -p public_deploy/data/countries
+          cp data/countries/*.json public_deploy/data/countries/
+
+          # In public repo pushen — ours-Strategie vermeidet Konflikte
           cd public_deploy
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add .
+          git add -A
           if ! git diff --cached --quiet; then
-            git commit -m "deploy: update $(date -u '+%Y-%m-%d %H:%M UTC')"
+            git commit -m "deploy: $(date -u '+%Y-%m-%d %H:%M UTC')"
             git push origin main
           else
-            echo "Nothing to deploy."
+            echo "Nothing new to deploy."
           fi
