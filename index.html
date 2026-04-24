@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -148,29 +149,32 @@
       <div id="modal-loading"><div class="modal-spinner"></div>Loading&hellip;</div>
       <div id="modal-content" style="display:none">
 
-        <!-- Monthly / Yearly total -->
-        <div class="modal-section-title" id="sec-monthly-title">&#x1F4C5; Monthly total registrations</div>
-        <div class="chart-wrap" id="wrap-monthly"><canvas id="chart-monthly"></canvas></div>
+```
+    <!-- Monthly / Yearly total -->
+    <div class="modal-section-title" id="sec-monthly-title">&#x1F4C5; Monthly total registrations</div>
+    <div class="chart-wrap" id="wrap-monthly"><canvas id="chart-monthly"></canvas></div>
 
-        <hr class="section-divider">
+    <hr class="section-divider">
 
-        <!-- Annual powertrain — 3-button toggle -->
-        <div class="modal-section-title">&#x26A1; Annual breakdown by powertrain</div>
-        <div class="pt-toggle">
-          <button class="pt-btn active" id="pt-absolute" onclick="switchPowertrain('absolute',this)">Powertrain absolute</button>
-          <button class="pt-btn" id="pt-share" onclick="switchPowertrain('share',this)">Market share %</button>
-          <button class="pt-btn" id="pt-stacked" onclick="switchPowertrain('stacked',this)">Stacked</button>
-        </div>
-        <div class="chart-wrap" id="wrap-annual"><canvas id="chart-annual"></canvas></div>
-        <div class="chart-wrap" id="wrap-stacked" style="display:none"><canvas id="chart-stacked"></canvas></div>
-        <div class="summary-grid" id="summary-grid"></div>
-
-      </div>
-      <div id="modal-nodata" style="display:none" class="no-data-msg">
-        &#x1F4ED; No data available for this country yet.<br>
-        <span style="font-size:0.68rem">ECB/ACEA covers ~30 EU/EEA countries</span>
-      </div>
+    <!-- Annual powertrain — 3-button toggle -->
+    <div class="modal-section-title">&#x26A1; Annual breakdown by powertrain</div>
+    <div class="pt-toggle">
+      <button class="pt-btn active" id="pt-absolute" onclick="switchPowertrain('absolute',this)">Powertrain absolute</button>
+      <button class="pt-btn" id="pt-share" onclick="switchPowertrain('share',this)">Market share %</button>
+      <button class="pt-btn" id="pt-stacked" onclick="switchPowertrain('stacked',this)">Stacked</button>
     </div>
+    <div class="chart-wrap" id="wrap-annual"><canvas id="chart-annual"></canvas></div>
+    <div class="chart-wrap" id="wrap-stacked" style="display:none"><canvas id="chart-stacked"></canvas></div>
+    <div class="summary-grid" id="summary-grid"></div>
+
+  </div>
+  <div id="modal-nodata" style="display:none" class="no-data-msg">
+    &#x1F4ED; No data available for this country yet.<br>
+    <span style="font-size:0.68rem">ECB/ACEA covers ~30 EU/EEA countries</span>
+  </div>
+</div>
+```
+
   </div>
 </div>
 
@@ -229,15 +233,16 @@
       </div>
       <div class="panel">
         <div class="panel-title">Country Details</div>
-        <div id="detail-content" style="color:var(--muted);font-size:.72rem">&larr; Click a country for details</div>
+        <div id="detail-content" style="color:var(--muted);font-size:.72rem">Click a country for details</div>
       </div>
       <div class="panel">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--border)">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--border)">
           <div class="panel-title" style="margin:0;padding:0;border:none" id="top-panel-title">Top 10 &middot; BEV Share % <span id="top-year"></span></div>
-          <div class="pt-toggle" style="margin:0">
+          <div class="pt-toggle" style="margin:0;flex-shrink:0">
             <button class="pt-btn active" id="top-btn-share" onclick="switchTopList('share',this)">Share %</button>
             <button class="pt-btn" id="top-btn-volume" onclick="switchTopList('volume',this)">Volume</button>
           </div>
+      </div>
         </div>
         <div class="top-list" id="top-share-list"></div>
         <div class="top-list" id="top-volume-list" style="display:none"></div>
@@ -1190,7 +1195,15 @@ function showDetail(rawName,year){
   const name=normName(rawName);
   const d=DATA[year]?.[name];
   const panel=document.getElementById("detail-content");
-  if(!d){panel.innerHTML=`<span style="color:var(--muted)">No data for <b style="color:var(--text)">${rawName}</b> in ${year}.</span>`;return;}
+  if(!d){
+    const ev=(EV_SHARE[year]||{})[name];
+    panel.innerHTML=`<div class="country-name">${rawName}</div>`
+      +(ev!=null
+        ?`<div class="stat-row"><span class="stat-label">BEV share ${year}</span><span class="stat-value hl">${ev.toFixed(1)}%</span></div>
+          <div style="font-size:0.65rem;color:var(--muted);margin-top:8px">No registration volume data available for this country</div>`
+        :`<span style="color:var(--muted)">No data available for ${year}</span>`);
+    return;
+  }
   const perK=(d[0]/(d[1]*1000)).toFixed(1);
   const sorted=Object.entries(DATA[year]).sort((a,b)=>b[1][0]-a[1][0]);
   const rank=sorted.findIndex(([k])=>k===name)+1;
@@ -1644,5 +1657,6 @@ document.getElementById("year-select").addEventListener("change",function(){
 });
 init();
 </script>
+
 </body>
 </html>
