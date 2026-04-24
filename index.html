@@ -36,13 +36,13 @@
   @keyframes pulse { 0%,100%{opacity:1;transform:scale(1);}50%{opacity:.4;transform:scale(.7);} }
   .year-select { background: var(--surface); border: 1px solid var(--border); color: var(--text); padding: 6px 12px; border-radius: 6px; font-family: 'DM Mono', monospace; font-size: 0.75rem; cursor: pointer; outline: none; }
   .year-select:focus { border-color: var(--accent); }
-  .main-grid { display: grid; grid-template-columns: 1fr 320px; gap: 20px; }
-  .map-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; position: relative; }
-  .map-panel svg { width: 100%; height: auto; display: block; }
+  .main-grid { display: grid; grid-template-columns: 1fr 320px; gap: 20px; align-items: start; }
+  .map-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; position: relative; aspect-ratio: 960/500; align-self: start; }
+  .map-panel svg { width: 100%; height: 100%; display: block; }
   .country-path { stroke: rgba(0,229,255,0.12); stroke-width: 0.4px; transition: fill 0.15s, filter 0.15s; cursor: pointer; }
   .country-path:hover { stroke: var(--accent); stroke-width: 1px; filter: brightness(1.4); }
   .country-path.selected { stroke: var(--accent2); stroke-width: 1.5px; }
-  .map-zoom-btns { position: absolute; bottom: 14px; right: 14px; display: flex; flex-direction: column; gap: 5px; z-index: 10; }
+  .map-zoom-btns { position: absolute; top: 50%; right: 10px; transform: translateY(-50%); display: flex; flex-direction: column; gap: 5px; z-index: 10; }
   .map-zoom-btns button { width: 30px; height: 30px; background: rgba(15,20,32,0.92); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 1.1rem; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.15s, border-color 0.15s; line-height: 1; padding: 0; }
   .map-zoom-btns button:hover { background: var(--border); border-color: var(--accent); color: var(--accent); }
   .map-zoom-reset { font-size: 0.55rem !important; letter-spacing: 0.04em; text-transform: uppercase; }
