@@ -174,7 +174,7 @@
     <div class="meta-block">
       <div class="update-badge"><span class="dot"></span><span id="last-update">Loading&hellip;</span></div>
       <select class="year-select" id="year-select">
-        <option value="2026">2026 Q1 (Jan&ndash;M&auml;r)</option>
+        <option value="2026">2026 Q1 (Jan&ndash;Mar)</option>
         <option value="2025">2025</option>
         <option value="2024" selected>2024</option>
         <option value="2023">2023</option>
@@ -241,14 +241,14 @@
 
 const DATA = {
   // ===================================================================
-  // VERIFIED — Datenstand April 2026
-  // Format: Land -> [Neuzulassungen, EinwohnerMio, Quelle]
-  // 2026 = Q1-Rohdaten (Jan–Mrz), alle anderen Jahre = Kalenderjahr
+  // VERIFIED — Data as of April 2026
+  // Format: country -> [registrations, populationMio, source]
+  // 2026 = Q1 raw data (Jan–Mar), all other years = full calendar year
   // EU+EFTA+UK: ACEA-Exaktwerte | DE: KBA | UK: SMMT | NO: OFV
   // IS: Samgöngustofa | CH: auto-schweiz | CN: CAAM | US: NADA/Wards
-  // JP: JADA | IN: SIAM (Fiskaljahr) | KR: KAMA+KAIDA | BR: ANFAVEA
+  // JP: JADA | IN: SIAM (fiscal year, mapped to end year) | KR: KAMA+KAIDA | BR: ANFAVEA
   // CA: DesRosiers | AU: VFACTS | RU: AEB | TR: ODD | ZA: NAAMSA
-  // TW: MOTC | NZ: MIA | IL: MOT IL | übrige: OICA (Jahresstatistik)
+  // TW: MOTC | NZ: MIA | IL: MOT IL | others: OICA annual statistics
   // ===================================================================
   2026: {
     "Germany":[699404,84.5,"KBA"],"France":[401555,66.6,"ACEA"],
@@ -267,25 +267,25 @@ const DATA = {
     "Lithuania":[9571,2.9,"ACEA"],"Latvia":[4993,1.9,"ACEA"],
     "Estonia":[4250,1.4,"ACEA"],"Cyprus":[3670,1.3,"ACEA"],
     "Luxembourg":[12538,0.67,"ACEA"],"Malta":[1558,0.56,"ACEA"],
-    "China":[6800000,1410,"CAAM Sch."],"United States":[4100000,335,"NADA Sch."],
-    "India":[1100000,1442,"SIAM Sch."],"Japan":[1100000,124,"JADA Sch."],
-    "Brazil":[600000,215,"ANFAVEA Sch."],"South Korea":[380000,51.8,"KAMA Sch."],
-    "Canada":[406000,40.1,"DesRosiers"],"Russia":[250000,144,"AEB Sch."],
-    "Turkey":[200000,86,"ODD Sch."],"Australia":[270000,27,"VFACTS Sch."],
-    "Mexico":[290000,130,"AMIA Sch."],"South Africa":[130000,63.2,"NAAMSA Sch."],
-    "New Zealand":[25000,5.2,"MIA Sch."],"Taiwan":[100000,23.4,"MOTC Sch."],
-    "Israel":[70000,9.8,"MOT IL Sch."],"Saudi Arabia":[170000,33.4,"OICA Sch."],
-    "Vietnam":[94000,99.5,"VAMA Sch."],"Philippines":[99000,117,"CAMPI Sch."],
-    "Chile":[84000,19.5,"ANAC Sch."],"Colombia":[79000,52.2,"ANDEMOS Sch."],
-    "Peru":[53000,34,"AAP Sch."],
-    "UAE":[91000,10,"OICA Sch."],"United Arab Emirates":[91000,10,"OICA Sch."],
-    "Morocco":[51000,37.5,"AIVAM Sch."],"Egypt":[64000,105,"OICA Sch."],
-    "Tunisia":[28000,12,"CCVT Sch."],"Kenya":[4300,55,"KNBS Sch."],
-    "Nigeria":[3600,223,"OICA Sch."],"Pakistan":[56000,240,"PAMA Sch."],
-    "Venezuela":[5100,28.5,"CAV Sch."],"Bangladesh":[2000,172,"BRTA Sch."],
-    "Indonesia":[250000,278,"Gaikindo Sch."],"Thailand":[130000,72,"TAI Sch."],
-    "Malaysia":[200000,35,"MAA Sch."],"Iran":[220000,90,"OICA Sch."],
-    "Argentina":[120000,46,"ADEFA Sch."]
+    "China":[6800000,1410,"CAAM est."],"United States":[4100000,335,"NADA est."],
+    "India":[1100000,1442,"SIAM est."],"Japan":[1100000,124,"JADA est."],
+    "Brazil":[600000,215,"ANFAVEA est."],"South Korea":[380000,51.8,"KAMA est."],
+    "Canada":[406000,40.1,"DesRosiers"],"Russia":[250000,144,"AEB est."],
+    "Turkey":[200000,86,"ODD est."],"Australia":[270000,27,"VFACTS est."],
+    "Mexico":[290000,130,"AMIA est."],"South Africa":[130000,63.2,"NAAMSA est."],
+    "New Zealand":[25000,5.2,"MIA est."],"Taiwan":[100000,23.4,"MOTC est."],
+    "Israel":[70000,9.8,"MOT IL est."],"Saudi Arabia":[170000,33.4,"OICA est."],
+    "Vietnam":[94000,99.5,"VAMA est."],"Philippines":[99000,117,"CAMPI est."],
+    "Chile":[84000,19.5,"ANAC est."],"Colombia":[79000,52.2,"ANDEMOS est."],
+    "Peru":[53000,34,"AAP est."],
+    "UAE":[91000,10,"OICA est."],"United Arab Emirates":[91000,10,"OICA est."],
+    "Morocco":[51000,37.5,"AIVAM est."],"Egypt":[64000,105,"OICA est."],
+    "Tunisia":[28000,12,"CCVT est."],"Kenya":[4300,55,"KNBS est."],
+    "Nigeria":[3600,223,"OICA est."],"Pakistan":[56000,240,"PAMA est."],
+    "Venezuela":[5100,28.5,"CAV est."],"Bangladesh":[2000,172,"BRTA est."],
+    "Indonesia":[250000,278,"Gaikindo est."],"Thailand":[130000,72,"TAI est."],
+    "Malaysia":[200000,35,"MAA est."],"Iran":[220000,90,"OICA est."],
+    "Argentina":[120000,46,"ADEFA est."]
   },
   2025: {
     "Germany":[2857591,84.5,"KBA"],"France":[1632152,66.6,"ACEA"],
@@ -698,9 +698,9 @@ const DATA = {
 };
 
 const EV_SHARE = {
-  // BEV-Marktanteil in % der Neuzulassungen
+  // BEV market share in % of new registrations
   // EU/EFTA/UK: ACEA | DE: KBA | NO: OFV | UK: SMMT
-  // CN/US/JP/KR/AU: IEA Global EV Outlook + nationale Behörden
+  // CN/US/JP/KR/AU: IEA Global EV Outlook + national authorities
   2015: {
     "Norway":17.1,"Iceland":2.6,"Netherlands":2.5,"Sweden":0.9,
     "Denmark":1.7,"Switzerland":0.7,"France":0.5,"United Kingdom":0.4,
