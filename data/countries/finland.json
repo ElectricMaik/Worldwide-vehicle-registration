@@ -4,7 +4,7 @@
   "population_mio": 5.6,
   "source_monthly": "ECB STS (96 months 2015-2022) + ACEA estimates (39 months 2023-2026)",
   "source_annual": "Eurostat road_eqr_carpda + ACEA 2025",
-  "last_updated": "2026-04-29T20:43:54.561869+00:00",
+  "last_updated": "2026-04-30T00:09:28.593698+00:00",
   "monthly": {
     "labels": [
       "2015-01",
