@@ -4,7 +4,7 @@
   "population_mio": 3.9,
   "source_monthly": "ACEA full-year totals, seasonal distribution (39 months 2023-2026)",
   "source_annual": "Eurostat road_eqr_carpda + ACEA 2025",
-  "last_updated": "2026-05-04T16:21:18.189662+00:00",
+  "last_updated": "2026-05-04T20:52:23.432511+00:00",
   "monthly": {
     "labels": [
       "2023-01",
